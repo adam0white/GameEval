@@ -9,7 +9,7 @@
  */
 import puppeteer from '@cloudflare/puppeteer';
 import type { Browser, Page } from '@cloudflare/puppeteer';
-import { Stagehand } from '@browserbasehq/stagehand';
+import { Stagehand, type ObserveResult } from '@browserbasehq/stagehand';
 import { endpointURLString } from '@cloudflare/playwright';
 import { WorkersAIClient } from '../shared/helpers/workersAIClient';
 import { insertTestEvent } from '../shared/helpers/d1';
@@ -536,7 +536,7 @@ export class TestAgent implements DurableObject {
     const page = this.stagehand.page;
 
     // Task 2: Use Stagehand observe() to identify interactive elements (AC #2)
-    let observedElements: any[];
+    let observedElements: ObserveResult[];
     try {
       // Stagehand page.observe() returns array of interactive element actions
       // Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
@@ -559,9 +559,9 @@ export class TestAgent implements DurableObject {
     
     for (const element of observedElements) {
       // Extract element information from Stagehand observe() result
-      // Stagehand returns actions with selectors and descriptions
-      const selector = element.selector || element.locator || `element-${Object.keys(controlMap).length}`;
-      const description = element.description || element.text || 'Interactive element';
+      // ObserveResult only provides: selector (string) and description (string)
+      const selector = element.selector || `element-${Object.keys(controlMap).length}`;
+      const description = element.description || 'Interactive element';
       
       // Classify element type based on description and properties
       let controlType: 'click' | 'keyboard' | 'drag' | 'hover' = 'click';
@@ -597,15 +597,88 @@ export class TestAgent implements DurableObject {
           `Using input schema to prioritize controls: ${Object.keys(schema.controls || {}).join(', ')}`
         );
         
+        // Prioritize controls matching inputSchema hints
+        // Add expected controls from schema if they weren't discovered
+        if (schema.controls) {
+          const expectedControls: string[] = [];
+          
+          // Check for movement controls (WASD, Arrow keys, etc.)
+          if (schema.controls.movement) {
+            expectedControls.push(...(Array.isArray(schema.controls.movement) ? schema.controls.movement : [schema.controls.movement]));
+          }
+          
+          // Check for action controls (Space, Click, etc.)
+          if (schema.controls.actions) {
+            expectedControls.push(...(Array.isArray(schema.controls.actions) ? schema.controls.actions : [schema.controls.actions]));
+          }
+          
+          // Validate discovered controls against inputSchema expectations
+          const discoveredDescriptions = Object.values(controlMap).map(c => c.description.toLowerCase()).join(' ');
+          const missingControls: string[] = [];
+          
+          for (const expectedControl of expectedControls) {
+            const controlLower = expectedControl.toLowerCase();
+            
+            // Check if expected control was discovered
+            const found = discoveredDescriptions.includes(controlLower) ||
+                         discoveredDescriptions.includes(controlLower.charAt(0)); // Check for single letter (W, A, S, D)
+            
+            if (!found) {
+              missingControls.push(expectedControl);
+            }
+          }
+          
+          // Log missing expected controls
+          if (missingControls.length > 0) {
+            await insertTestEvent(
+              this.env.DB,
+              this.testRunId,
+              Phase.PHASE2,
+              'schema_validation',
+              `Expected controls not found: ${missingControls.join(', ')}`
+            );
+          }
+          
+          // Prioritize controls matching schema by adding them first to a prioritized map
+          const prioritizedControlMap: ControlMap = {};
+          const nonPriorityControls: ControlMap = {};
+          
+          for (const [selector, control] of Object.entries(controlMap)) {
+            const descLower = control.description.toLowerCase();
+            let isPriority = false;
+            
+            // Check if control matches any expected control
+            for (const expectedControl of expectedControls) {
+              const expectedLower = expectedControl.toLowerCase();
+              if (descLower.includes(expectedLower) || descLower.includes(expectedLower.charAt(0))) {
+                isPriority = true;
+                break;
+              }
+            }
+            
+            if (isPriority) {
+              prioritizedControlMap[selector] = control;
+            } else {
+              nonPriorityControls[selector] = control;
+            }
+          }
+          
+          // Merge prioritized controls first, then non-priority controls
+          result.controls = { ...prioritizedControlMap, ...nonPriorityControls };
+        } else {
+          result.controls = controlMap;
+        }
+        
         // Note: inputSchema guides but doesn't restrict discovery
-        // All discovered controls are kept, schema just provides context
+        // All discovered controls are kept, schema just provides prioritization
       } catch (schemaError) {
         // Log error but continue (inputSchema is optional guidance)
         console.error('Failed to parse inputSchema:', schemaError);
+        result.controls = controlMap;
       }
+    } else {
+      result.controls = controlMap;
     }
-
-    result.controls = controlMap;
 
     // Task 5: Capture screenshot with controls (AC #5)
     try {
