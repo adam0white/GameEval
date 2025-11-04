@@ -47,6 +47,7 @@ export interface TestEvent {
   event_type: string;
   description: string;
   timestamp: number;
+  metadata?: string; // Optional JSON string for AI request metadata (model, cost, tokens)
 }
 
 /**
@@ -108,4 +109,48 @@ export type LogArtifact = {
  * Represents a test artifact stored in R2
  */
 export type TestArtifact = ScreenshotArtifact | LogArtifact;
+
+// AI Gateway types (Story 1.5)
+
+/**
+ * AI model preference for routing
+ */
+export type ModelPreference = 'primary' | 'fallback';
+
+/**
+ * Token usage information from AI requests
+ */
+export interface TokenUsage {
+  input?: number;
+  output?: number;
+  total?: number;
+}
+
+/**
+ * AI request metadata for observability
+ */
+export interface AIMetadata {
+  model: string;
+  provider: 'workers-ai' | 'openai' | 'anthropic';
+  cached?: boolean;
+  cost?: number;
+  tokens?: TokenUsage;
+  latency_ms?: number;
+  test_run_id?: string;
+  user_id?: string;
+  [key: string]: unknown; // Allow additional custom metadata
+}
+
+/**
+ * Standardized AI response from callAI() helper
+ */
+export interface AIResponse {
+  text: string;
+  model: string;
+  provider: 'workers-ai' | 'openai' | 'anthropic';
+  cost?: number;
+  cached?: boolean;
+  tokens?: TokenUsage;
+  metadata?: AIMetadata;
+}
 

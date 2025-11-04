@@ -64,6 +64,10 @@ export enum EventType {
   COMPLETED = 'completed',
   FAILED = 'failed',
   CONTROL_DISCOVERED = 'control_discovered',
+  // AI Gateway events (Story 1.5)
+  AI_REQUEST_START = 'ai_request_start',
+  AI_REQUEST_COMPLETE = 'ai_request_complete',
+  AI_REQUEST_FAILED = 'ai_request_failed',
 }
 
 // R2 Storage paths and types (Story 1.3)

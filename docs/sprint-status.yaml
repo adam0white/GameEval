@@ -41,7 +41,7 @@ development_status:
   1-2-d1-database-schema-and-migrations: done
   1-3-r2-storage-setup-and-helper-functions: review
   1-4-workflow-orchestration-setup: review
-  1-5-ai-gateway-configuration: review
+  1-5-ai-gateway-configuration: done
   epic-1-retrospective: optional
 
   epic-2: backlog

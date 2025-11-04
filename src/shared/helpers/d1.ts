@@ -138,6 +138,7 @@ export async function updateTestStatus(
  * @param phase - Test phase (phase1, phase2, phase3, phase4)
  * @param eventType - Type of event (started, progress, completed, failed, etc.)
  * @param description - Human-readable event description
+ * @param metadata - Optional JSON string for additional event metadata (AI requests, etc.)
  * @returns DbResult indicating success or error
  */
 export async function insertTestEvent(
@@ -145,19 +146,32 @@ export async function insertTestEvent(
   testRunId: string,
   phase: string,
   eventType: string,
-  description: string
+  description: string,
+  metadata?: string
 ): Promise<DbResult<void>> {
   try {
     const timestamp = Date.now();
     
-    await db
-      .prepare(
-        `INSERT INTO ${TABLE_NAMES.TEST_EVENTS} 
-        (test_run_id, phase, event_type, description, timestamp)
-        VALUES (?, ?, ?, ?, ?)`
-      )
-      .bind(testRunId, phase, eventType, description, timestamp)
-      .run();
+    // If metadata is provided, use the 6-parameter query; otherwise use 5-parameter
+    if (metadata !== undefined) {
+      await db
+        .prepare(
+          `INSERT INTO ${TABLE_NAMES.TEST_EVENTS} 
+          (test_run_id, phase, event_type, description, timestamp, metadata)
+          VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(testRunId, phase, eventType, description, timestamp, metadata)
+        .run();
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO ${TABLE_NAMES.TEST_EVENTS} 
+          (test_run_id, phase, event_type, description, timestamp)
+          VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(testRunId, phase, eventType, description, timestamp)
+        .run();
+    }
 
     return { success: true, data: undefined };
   } catch (error) {
