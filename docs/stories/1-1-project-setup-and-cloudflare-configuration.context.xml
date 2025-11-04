@@ -1,0 +1,226 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1</storyId>
+    <title>Project Setup and Cloudflare Configuration</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-04</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-1-project-setup-and-cloudflare-configuration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a configured Cloudflare Workers project with all required services</iWant>
+    <soThat>I have the foundation to build the GameEval autonomous test pipeline</soThat>
+    <tasks>
+      <task id="1" title="Initialize Cloudflare Project">
+        <subtask>Create project directory: gameeval-qa-pipeline</subtask>
+        <subtask>Run wrangler init to scaffold project</subtask>
+        <subtask>Configure wrangler.toml with compatibility_date: 2024-01-01</subtask>
+        <subtask>Set project name: gameeval-qa-pipeline</subtask>
+        <subtask>Set main entry point: src/index.ts</subtask>
+      </task>
+      <task id="2" title="Configure Service Bindings in wrangler.toml">
+        <subtask>Add AI Gateway binding: [ai] with binding = "AI"</subtask>
+        <subtask>Add D1 database binding: [[d1_databases]] with binding = "DB", database_name = "gameeval-db"</subtask>
+        <subtask>Add R2 bucket binding: [[r2_buckets]] with binding = "EVIDENCE_BUCKET", bucket_name = "gameeval-evidence"</subtask>
+        <subtask>Add Workflows binding: [[workflows]] with binding = "WORKFLOW", name = "gameTestPipeline"</subtask>
+        <subtask>Add Durable Objects binding: [[durable_objects.bindings]] with name = "TEST_AGENT", class_name = "TestAgent"</subtask>
+        <subtask>Add Browser Rendering binding: [browser] with binding = "BROWSER"</subtask>
+      </task>
+      <task id="3" title="Create Project Structure">
+        <subtask>Create directory structure: src/, src/workers/, src/agents/, src/workflows/, src/shared/types.ts, src/shared/constants.ts, src/shared/helpers/, migrations/</subtask>
+        <subtask>Create placeholder files for future stories (empty exports)</subtask>
+      </task>
+      <task id="4" title="Configure TypeScript">
+        <subtask>Create tsconfig.json with strict mode, target ES2022, module ES2022, types @cloudflare/workers-types</subtask>
+      </task>
+      <task id="5" title="Initialize package.json with Dependencies">
+        <subtask>Create package.json with project metadata</subtask>
+        <subtask>Add dev dependencies: @cloudflare/workers-types@^4.0.0, typescript@^5.0.0</subtask>
+        <subtask>Add runtime dependencies: @cloudflare/ai@^1.0.0, stagehand@latest</subtask>
+        <subtask>Add scripts: dev, deploy, lint</subtask>
+      </task>
+      <task id="6" title="Implement Basic Dashboard Worker">
+        <subtask>Create src/index.ts with fetch handler accepting Request, Env, ExecutionContext</subtask>
+        <subtask>Check if pathname === '/' and method === 'GET'</subtask>
+        <subtask>Return Response with "GameEval QA Pipeline - Ready" (status 200)</subtask>
+        <subtask>Return 404 for all other routes</subtask>
+        <subtask>Define Env interface with all binding types: AI, DB, EVIDENCE_BUCKET, WORKFLOW, TEST_AGENT, BROWSER</subtask>
+      </task>
+      <task id="7" title="Create Cloudflare Resources">
+        <subtask>Run wrangler d1 create gameeval-db to create D1 database</subtask>
+        <subtask>Copy database_id to wrangler.toml under [[d1_databases]]</subtask>
+        <subtask>Run wrangler r2 bucket create gameeval-evidence to create R2 bucket</subtask>
+        <subtask>Verify resources created in Cloudflare dashboard</subtask>
+      </task>
+      <task id="8" title="Verify Development Environment">
+        <subtask>Run npm install to install dependencies</subtask>
+        <subtask>Run tsc --noEmit to check for type errors (should pass)</subtask>
+        <subtask>Run wrangler dev and test locally at http://localhost:8787/</subtask>
+        <subtask>Verify response: "GameEval QA Pipeline - Ready"</subtask>
+        <subtask>Verify all bindings accessible (test by logging env.DB, env.EVIDENCE_BUCKET, etc.)</subtask>
+      </task>
+      <task id="9" title="Deploy to Cloudflare (Optional Validation)">
+        <subtask>Run wrangler deploy to deploy to production</subtask>
+        <subtask>Access deployed Worker URL</subtask>
+        <subtask>Verify response: "GameEval QA Pipeline - Ready"</subtask>
+        <subtask>Check Cloudflare dashboard for successful deployment</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1">Cloudflare Workers project initialized with wrangler.toml configuration</criterion>
+    <criterion id="AC-2">Service bindings configured for: Workflows (WORKFLOW, gameTestPipeline), D1 Database (DB, gameeval-db), R2 Bucket (EVIDENCE_BUCKET, gameeval-evidence), Browser Rendering (BROWSER), AI Gateway (AI), Durable Objects (TEST_AGENT, TestAgent)</criterion>
+    <criterion id="AC-3">Project structure created following architecture pattern: /src/index.ts, /src/workers/, /src/agents/, /src/workflows/, /src/shared/, /migrations/</criterion>
+    <criterion id="AC-4">TypeScript configuration with strict mode enabled (tsconfig.json)</criterion>
+    <criterion id="AC-5">Package.json with required dependencies: @cloudflare/workers-types (^4.0.0), @cloudflare/ai (^1.0.0), stagehand (latest), wrangler (^3.78.0)</criterion>
+    <criterion id="AC-6">Basic Dashboard Worker responds to HTTP GET / with "GameEval QA Pipeline - Ready"</criterion>
+    <criterion id="AC-7">Development environment verified: wrangler dev runs successfully, tsc --noEmit shows no type errors, all service bindings accessible in Worker environment</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-1-context.md</path>
+        <title>Epic 1 Technical Context: Core Test Infrastructure</title>
+        <section>Section 1: Overview and Scope</section>
+        <snippet>Epic 1 establishes foundational Cloudflare platform infrastructure for GameEval autonomous game testing pipeline. Creates scaffolding for test execution including data persistence (D1 + R2), workflow orchestration, AI Gateway configuration, and service bindings.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1-context.md</path>
+        <title>Epic 1 Technical Context</title>
+        <section>Section 2.1: Architecture Pattern</section>
+        <snippet>Implements foundation of Workflows + Agents SDK pattern. Dashboard Worker serves as entry point, RPC-only architecture with no exposed HTTP APIs, all internal communication via service bindings.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1-context.md</path>
+        <title>Epic 1 Technical Context</title>
+        <section>Section 3.3: APIs and Interfaces</section>
+        <snippet>Dashboard Worker HTTP endpoint: GET / returns "GameEval QA Pipeline - Ready". Env interface defines all binding types: AI, DB, EVIDENCE_BUCKET, WORKFLOW, TEST_AGENT, BROWSER.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1-context.md</path>
+        <title>Epic 1 Technical Context</title>
+        <section>Section 5.1: External Dependencies</section>
+        <snippet>Required dependencies: @cloudflare/workers-types (^4.0.0), @cloudflare/ai (^1.0.0), stagehand (latest), wrangler (^3.78.0). Installed via npm.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1-context.md</path>
+        <title>Epic 1 Technical Context</title>
+        <section>Section 5.3: Integration Points - wrangler.toml Configuration</section>
+        <snippet>Complete wrangler.toml configuration with all service bindings: AI Gateway ([ai]), D1 Database ([[d1_databases]]), R2 Bucket ([[r2_buckets]]), Workflows ([[workflows]]), Durable Objects ([[durable_objects.bindings]]), Browser Rendering ([browser]).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/project-structure.md</path>
+        <title>Project Structure</title>
+        <section>Root directory structure</section>
+        <snippet>Monorepo structure: src/index.ts (Dashboard Worker entry point), src/workers/ (Worker implementations), src/workflows/ (Workflow orchestration), src/agents/ (TestAgent Durable Object), src/shared/ (types, constants, helpers), migrations/ (D1 migration scripts).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/implementation-patterns.md</path>
+        <title>Implementation Patterns</title>
+        <section>RPC Service Binding Pattern</section>
+        <snippet>All internal communication via RPC, no HTTP REST APIs. Binding access through env parameter. Example: Dashboard Worker calling Workflow via env.WORKFLOW.create().run().</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/technology-stack-details.md</path>
+        <title>Technology Stack Details</title>
+        <section>Core Technologies - Compute Layer</section>
+        <snippet>Cloudflare Workers: Serverless JavaScript runtime at the edge. Dashboard Worker serves UI and handles RPC calls. Entry point: src/index.ts. Deployment region: Global edge network (300+ locations).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/technology-stack-details.md</path>
+        <title>Technology Stack Details</title>
+        <section>Integration Points - RPC Service Bindings</section>
+        <snippet>No exposed HTTP endpoints. All external access through Dashboard Worker. All internal communication via RPC service bindings. Using context exports for service bindings, refer to Cloudflare Workers documentation.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <!-- No existing code artifacts - greenfield project -->
+    </code>
+    <dependencies>
+      <runtime>
+        <package name="@cloudflare/ai" version="^1.0.0" purpose="AI Gateway SDK for routing AI requests"/>
+        <package name="stagehand" version="latest" purpose="Browser automation library (used in Epic 2)"/>
+      </runtime>
+      <devDependencies>
+        <package name="@cloudflare/workers-types" version="^4.0.0" purpose="TypeScript types for Cloudflare Workers APIs"/>
+        <package name="typescript" version="^5.0.0" purpose="TypeScript compiler"/>
+        <package name="wrangler" version="^3.78.0" purpose="Cloudflare CLI for deployment and development"/>
+      </devDependencies>
+      <cloudflareServices>
+        <service name="D1 Database" binding="DB" purpose="Test metadata storage"/>
+        <service name="R2 Bucket" binding="EVIDENCE_BUCKET" purpose="Screenshots and logs storage"/>
+        <service name="Workflows" binding="WORKFLOW" purpose="Test orchestration"/>
+        <service name="Durable Objects" binding="TEST_AGENT" purpose="TestAgent instances"/>
+        <service name="AI Gateway" binding="AI" purpose="AI request routing"/>
+        <service name="Browser Rendering" binding="BROWSER" purpose="Serverless browser sessions"/>
+      </cloudflareServices>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture" priority="critical">RPC-only architecture: All internal communication must use service bindings. No exposed HTTP REST APIs except Dashboard Worker root endpoint.</constraint>
+    <constraint type="architecture" priority="critical">Workflows + Agents SDK pattern: Dashboard Worker serves as entry point, GameTestPipeline Workflow orchestrates execution, TestAgent Durable Objects execute test phases.</constraint>
+    <constraint type="project-structure" priority="high">Monorepo pattern with flat structure: /src/workers, /src/workflows, /src/agents, /src/shared. No circular dependencies. Shared code imported from /src/shared only.</constraint>
+    <constraint type="typescript" priority="high">TypeScript strict mode enabled. Target ES2022. Module ES2022. Types: @cloudflare/workers-types. All files use TypeScript (.ts extension).</constraint>
+    <constraint type="naming" priority="medium">TypeScript files: camelCase for files, PascalCase for classes (e.g., gameTestPipeline.ts, TestAgent.ts). SQL migrations: Numbered prefix, snake_case (e.g., 0001_create_test_runs.sql).</constraint>
+    <constraint type="async-await" priority="high">Always use async/await for asynchronous operations. Never use raw Promises or callbacks. Error handling: try-catch at boundaries, throw for unexpected errors.</constraint>
+    <constraint type="service-bindings" priority="critical">All service bindings configured in wrangler.toml before code implementation. Validate bindings in dev environment before production deployment.</constraint>
+    <constraint type="error-handling" priority="high">Graceful error handling with user-friendly messages. All errors logged to test_events with descriptive messages.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>Env</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+        export interface Env {
+          AI: any; // AI Gateway binding
+          DB: D1Database; // D1 database
+          EVIDENCE_BUCKET: R2Bucket; // R2 object storage
+          WORKFLOW: Workflow; // Workflows binding
+          TEST_AGENT: DurableObjectNamespace; // TestAgent DO
+          BROWSER: Fetcher; // Browser Rendering API
+        }
+      </signature>
+      <path>src/shared/types.ts (to be created)</path>
+    </interface>
+    <interface>
+      <name>Dashboard Worker fetch handler</name>
+      <kind>Worker entry point</kind>
+      <signature>
+        export default {
+          async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise&lt;Response&gt; {
+            if (request.method === 'GET' &amp;&amp; new URL(request.url).pathname === '/') {
+              return new Response('GameEval QA Pipeline - Ready', { status: 200 });
+            }
+            return new Response('Not Found', { status: 404 });
+          }
+        };
+      </signature>
+      <path>src/index.ts (to be created)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Manual integration testing in Cloudflare dashboard and wrangler dev local environment. No unit testing required for MVP - focus on integration testing to verify service bindings and deployment. Use wrangler commands for resource creation and validation. Test bindings by logging env properties in Worker fetch handler.</standards>
+    <locations>No test files for this story. Integration tests performed manually via wrangler dev and Cloudflare dashboard.</locations>
+    <ideas>
+      <idea criterion="AC-1">Test: Run wrangler init, verify wrangler.toml created with correct compatibility_date (2024-01-01) and main entry point (src/index.ts).</idea>
+      <idea criterion="AC-2">Test: Open wrangler.toml, verify all 6 service bindings configured correctly (AI, DB, EVIDENCE_BUCKET, WORKFLOW, TEST_AGENT, BROWSER) with correct binding names.</idea>
+      <idea criterion="AC-3">Test: Run ls -R src/, verify directory structure matches architecture: src/index.ts, src/workers/, src/agents/, src/workflows/, src/shared/types.ts, src/shared/constants.ts, src/shared/helpers/, migrations/.</idea>
+      <idea criterion="AC-4">Test: Open tsconfig.json, verify "strict": true, "target": "ES2022", "types": ["@cloudflare/workers-types"].</idea>
+      <idea criterion="AC-5">Test: Open package.json, verify dependencies section includes @cloudflare/ai@^1.0.0 and stagehand@latest. Verify devDependencies includes @cloudflare/workers-types@^4.0.0 and typescript@^5.0.0.</idea>
+      <idea criterion="AC-6">Test: Run wrangler dev, open http://localhost:8787/ in browser, verify response text is "GameEval QA Pipeline - Ready" with status 200. Test GET /invalid-path returns 404.</idea>
+      <idea criterion="AC-7">Test: Run tsc --noEmit, verify command exits with code 0 (no type errors). Run wrangler dev, add console.log(env.DB, env.EVIDENCE_BUCKET) in fetch handler, verify bindings are defined (not undefined).</idea>
+      <idea criterion="integration">Test: Run wrangler d1 create gameeval-db, verify database created and database_id returned. Copy ID to wrangler.toml, run wrangler dev, verify env.DB accessible.</idea>
+      <idea criterion="integration">Test: Run wrangler r2 bucket create gameeval-evidence, verify bucket created. Run wrangler dev, verify env.EVIDENCE_BUCKET accessible.</idea>
+      <idea criterion="deployment">Test: Run wrangler deploy, verify deployment succeeds. Access Worker URL (https://gameeval-qa-pipeline.{subdomain}.workers.dev/), verify response "GameEval QA Pipeline - Ready".</idea>
+    </ideas>
+  </tests>
+</story-context>
+
