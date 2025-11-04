@@ -233,6 +233,30 @@ export interface Phase3Result {
 }
 
 /**
+ * Metric score for a single evaluation dimension (Story 2.6)
+ */
+export interface MetricScore {
+  /** Metric name (load, visual, controls, playability, technical, overall) */
+  name: string;
+  /** Score value (0-100) */
+  score: number;
+  /** 2-3 sentence justification referencing evidence */
+  justification: string;
+}
+
+/**
+ * Phase 4 specific result structure (Story 2.6)
+ */
+export interface Phase4Result {
+  /** Whether Phase 4 succeeded */
+  success: boolean;
+  /** Calculated overall quality score (0-100) */
+  overallScore: number;
+  /** Array of 6 metric scores (5 metrics + overall) */
+  metrics: MetricScore[];
+}
+
+/**
  * Browser session handle stored in DO state
  */
 export interface BrowserSessionHandle {

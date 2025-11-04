@@ -2,12 +2,47 @@
  * Application constants for the GameEval QA Pipeline
  */
 
-// Error messages
+// Error messages for user-friendly error handling (Story 2.7)
 export const ERROR_MESSAGES = {
   NOT_FOUND: 'Not Found',
   INTERNAL_SERVER_ERROR: 'Internal Server Error',
   INVALID_REQUEST: 'Invalid Request',
+  
+  // Network and HTTP errors
+  GAME_NOT_FOUND: 'The game URL could not be accessed. Please check the URL is correct.',
+  NETWORK_ERROR: 'Network connection error during test. Please check your internet connection.',
+  INVALID_URL: 'Invalid game URL. Please check the URL format is correct.',
+  
+  // Timeout errors (phase-specific)
+  PHASE1_TIMEOUT: 'The game took too long to load. Please check if the URL is accessible.',
+  PHASE2_TIMEOUT: 'Control discovery timed out. The game may not have interactive elements we can detect.',
+  PHASE3_TIMEOUT: "The AI agent couldn't make progress playing the game. The game may require specific interactions we couldn't detect.",
+  PHASE4_TIMEOUT: 'Evaluation timed out. Please try again in a few minutes.',
+  GENERIC_TIMEOUT: 'The operation took too long to complete. Please try again.',
+  
+  // AI Gateway errors
+  AI_GATEWAY_ERROR: 'The AI evaluation service is temporarily unavailable. Please try again in a few minutes.',
+  AI_MODEL_UNAVAILABLE: 'The AI model is temporarily unavailable. Please try again in a few minutes.',
+  
+  // Browser errors
+  BROWSER_SESSION_ERROR: 'The browser session encountered an error. The test may need to be restarted.',
+  BROWSER_LAUNCH_ERROR: 'Failed to launch browser session. Please try again.',
+  SCREENSHOT_ERROR: 'Failed to capture screenshots during test execution.',
+  
+  // Generic fallback
+  GENERIC_ERROR: 'An unexpected error occurred during test execution. Please try again.',
 } as const;
+
+// Error pattern regexes for error translation (Story 2.7)
+export const ERROR_PATTERNS = [
+  { pattern: /404|not found/i, message: ERROR_MESSAGES.GAME_NOT_FOUND },
+  { pattern: /net::ERR|network|fetch failed/i, message: ERROR_MESSAGES.NETWORK_ERROR },
+  { pattern: /invalid url/i, message: ERROR_MESSAGES.INVALID_URL },
+  { pattern: /ai gateway|model|anthropic|openai/i, message: ERROR_MESSAGES.AI_GATEWAY_ERROR },
+  { pattern: /browser.*error|puppeteer|playwright/i, message: ERROR_MESSAGES.BROWSER_SESSION_ERROR },
+  { pattern: /screenshot/i, message: ERROR_MESSAGES.SCREENSHOT_ERROR },
+  { pattern: /timeout|timed out/i, message: ERROR_MESSAGES.GENERIC_TIMEOUT },
+] as const;
 
 // HTTP status codes
 export const STATUS_CODES = {

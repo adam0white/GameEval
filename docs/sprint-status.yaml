@@ -50,7 +50,7 @@ development_status:
   2-3-phase-1-load-validation: ready-for-dev
   2-4-phase-2-control-discovery: review
   2-5-phase-3-gameplay-exploration-with-computer-use: done
-  2-6-phase-4-evaluation-scoring: ready-for-dev
+  2-6-phase-4-evaluation-scoring: done
   2-7-graceful-error-handling-and-user-friendly-messages: ready-for-dev
   epic-2-retrospective: optional
 

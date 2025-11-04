@@ -308,7 +308,7 @@ The story ensures that regardless of where failures occur (Phase 1-4), users rec
 
 ### Agent Model Used
 
-<!-- Will be filled by dev agent during implementation -->
+Claude Sonnet 4.5
 
 ### Debug Log References
 
@@ -316,8 +316,75 @@ The story ensures that regardless of where failures occur (Phase 1-4), users rec
 
 ### Completion Notes List
 
-<!-- Will be filled by dev agent during implementation -->
+**Implementation completed on 2025-11-04**
+
+✅ **Migration Created**: Added `error_message` field to test_runs table (0005_add_error_message_to_test_runs.sql)
+
+✅ **Error Constants**: Added comprehensive error message patterns and translation constants to `src/shared/constants.ts`:
+- Phase-specific timeout messages (Phase 1-4)
+- Network and HTTP error messages
+- AI Gateway error messages
+- Browser error messages
+- ERROR_PATTERNS array with regex patterns for automatic error translation
+
+✅ **TestAgent Error Handling**: Enhanced `src/agents/TestAgent.ts` with:
+- `translateError()` method: Maps technical errors to user-friendly messages with phase-specific handling
+- `sanitizeErrorMessage()` method: Removes stack traces, internal codes, infrastructure details, file paths
+- `storeErrorMessage()` method: Updates test_runs.error_message and broadcasts via WebSocket
+- Updated all phase methods (runPhase1-4) to use new error handling
+- Enhanced Phase 4 to accept `hasPartialEvidence` parameter for graceful degradation
+
+✅ **Workflow Graceful Degradation**: Enhanced `src/workflows/GameTestPipeline.ts`:
+- Phase 4 now checks for partial evidence from earlier phases
+- Logs graceful degradation when earlier phases fail
+- Stores error messages in test_runs table on failure
+- Provides clear user-friendly messages for partial results
+
+✅ **Error Translation**: All phase errors now translated using centralized `translateError()`:
+- 404 errors → "The game URL could not be accessed..."
+- Timeout errors → Phase-specific messages
+- AI Gateway errors → "The AI evaluation service is temporarily unavailable..."
+- Browser errors → "The browser session encountered an error..."
+- Network errors → "Network connection error during test..."
+
+✅ **Error Sanitization**: All user-facing error messages sanitized:
+- Stack traces removed (everything after "at " or newline)
+- Internal error codes removed (EACCES, ENOTFOUND, etc.)
+- File paths removed (/src/..., C:\...)
+- Infrastructure details removed (Durable Object, R2 bucket, Workflow, etc.)
+- Internal URLs removed (http://testAgent/...)
+- Technical details preserved in test_events.metadata for debugging
+
+✅ **Graceful Degradation**: Implemented for all phase failures:
+- Phase 1-2 fail → Phase 4 runs with partial evidence (limited or no screenshots)
+- Phase 3 fails → Phase 4 runs with Phase 1-2 evidence (screenshots, logs)
+- Phase 4 fails → Partial results stored with error message
+- Workflow coordinates Phase 4 execution based on available evidence
+
+✅ **Test Coverage**: Created `tests/story-2.7-error-handling.test.ts` with:
+- Unit tests for error message constants
+- Error pattern matching tests
+- Error sanitization tests
+- Graceful degradation message tests
+- Manual integration test notes
+
+**All Acceptance Criteria Met:**
+1. ✅ All phase methods wrapped in try-catch blocks with comprehensive error handling
+2. ✅ Technical errors translated to user-friendly messages using ERROR_PATTERNS
+3. ✅ Phase 1-2 failures skip to Phase 4 with partial evidence
+4. ✅ Phase 3 failures still run Phase 4 with available evidence
+5. ✅ Phase 4 failures store partial results with error messages
+6. ✅ Error messages stored in test_runs.error_message and broadcast via WebSocket
+7. ✅ Retry logic delegated to Workflow (TestAgent reports failures clearly)
+8. ✅ Stack traces, internal codes, and infrastructure details never exposed to users
 
 ### File List
 
-<!-- Will be filled by dev agent during implementation -->
+**Modified Files:**
+- `src/agents/TestAgent.ts` - Added error translation, sanitization, and storage methods; updated all phase error handling
+- `src/workflows/GameTestPipeline.ts` - Enhanced graceful degradation logic and error message storage
+- `src/shared/constants.ts` - Added comprehensive error message constants and translation patterns
+
+**New Files:**
+- `migrations/0005_add_error_message_to_test_runs.sql` - Added error_message field to test_runs table
+- `tests/story-2.7-error-handling.test.ts` - Unit tests for error handling functionality

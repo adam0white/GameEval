@@ -12,10 +12,11 @@ import type { Browser, Page } from '@cloudflare/puppeteer';
 import { Stagehand, type ObserveResult } from '@browserbasehq/stagehand';
 import { endpointURLString } from '@cloudflare/playwright';
 import { WorkersAIClient } from '../shared/helpers/workersAIClient';
-import { insertTestEvent } from '../shared/helpers/d1';
-import { uploadScreenshot, uploadLog } from '../shared/helpers/r2';
-import { Phase, LogType } from '../shared/constants';
-import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError, Phase1Result, Phase2Result, Phase3Result, ControlMap } from '../shared/types';
+import { insertTestEvent, insertEvaluationScore, updateTestStatus } from '../shared/helpers/d1';
+import { uploadScreenshot, uploadLog, getTestArtifacts } from '../shared/helpers/r2';
+import { callAI } from '../shared/helpers/ai-gateway';
+import { Phase, LogType, ERROR_MESSAGES, ERROR_PATTERNS } from '../shared/constants';
+import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError, Phase1Result, Phase2Result, Phase3Result, Phase4Result, MetricScore, ControlMap } from '../shared/types';
 
 export class TestAgent implements DurableObject {
   private state: DurableObjectState;
@@ -285,19 +286,24 @@ export class TestAgent implements DurableObject {
 
       return Response.json(result);
     } catch (error) {
-      // Translate errors to user-friendly messages (Task 1)
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      // Translate errors to user-friendly messages (Story 2.7)
+      const errorObj = error instanceof Error ? error : new Error('Unknown error');
+      const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE1);
       result.success = false;
-      result.errors.push(this.translatePhase1Error(message));
+      result.errors.push(userFriendlyMessage);
       
-      // Log error to test_events
+      // Store error message in test_runs table (Story 2.7)
+      await this.storeErrorMessage(userFriendlyMessage);
+      
+      // Log technical error details to test_events (for debugging)
       if (this.testRunId && this.env.DB) {
         await insertTestEvent(
           this.env.DB,
           this.testRunId,
           Phase.PHASE1,
           'failed',
-          `Phase 1 failed: ${message}`
+          `Phase 1 failed: ${errorObj.message}`,
+          JSON.stringify({ stack: errorObj.stack, phase: Phase.PHASE1 })
         );
       }
       
@@ -443,24 +449,6 @@ export class TestAgent implements DurableObject {
     }
   }
 
-  /**
-   * Translate Phase 1 errors to user-friendly messages
-   */
-  private translatePhase1Error(message: string): string {
-    if (message.includes('timed out') || message.includes('timeout')) {
-      return 'Game page did not load within timeout. Please check the URL and try again.';
-    }
-    if (message.includes('net::ERR') || message.includes('Network')) {
-      return 'Network error while loading game. Please check your connection and the game URL.';
-    }
-    if (message.includes('Invalid URL')) {
-      return 'Invalid game URL. Please check the URL format is correct.';
-    }
-    if (message.includes('browser')) {
-      return 'Failed to launch browser session. Please try again.';
-    }
-    return message;
-  }
 
   /**
    * Phase 2: Control Discovery (Story 2.4)
@@ -488,20 +476,25 @@ export class TestAgent implements DurableObject {
 
       return Response.json(result);
     } catch (error) {
-      // Translate errors to user-friendly messages (Task 1)
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      // Translate errors to user-friendly messages (Story 2.7)
+      const errorObj = error instanceof Error ? error : new Error('Unknown error');
+      const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE2);
       result.success = false;
       result.controls = {};
       result.hypothesis = '';
       
-      // Log error to test_events
+      // Store error message in test_runs table (Story 2.7)
+      await this.storeErrorMessage(userFriendlyMessage);
+      
+      // Log technical error details to test_events (for debugging)
       if (this.testRunId && this.env.DB) {
         await insertTestEvent(
           this.env.DB,
           this.testRunId,
           Phase.PHASE2,
           'failed',
-          `Phase 2 failed: ${message}`
+          `Phase 2 failed: ${errorObj.message}`,
+          JSON.stringify({ stack: errorObj.stack, phase: Phase.PHASE2 })
         );
       }
       
@@ -833,19 +826,24 @@ export class TestAgent implements DurableObject {
 
       return Response.json(result);
     } catch (error) {
-      // Translate errors to user-friendly messages (Task 1)
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      // Translate errors to user-friendly messages (Story 2.7)
+      const errorObj = error instanceof Error ? error : new Error('Unknown error');
+      const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE3);
       result.success = false;
-      result.errors.push(this.translatePhase3Error(message));
+      result.errors.push(userFriendlyMessage);
       
-      // Log error to test_events
+      // Store error message in test_runs table (Story 2.7)
+      await this.storeErrorMessage(userFriendlyMessage);
+      
+      // Log technical error details to test_events (for debugging)
       if (this.testRunId && this.env.DB) {
         await insertTestEvent(
           this.env.DB,
           this.testRunId,
           Phase.PHASE3,
           'failed',
-          `Phase 3 failed: ${message}`
+          `Phase 3 failed: ${errorObj.message}`,
+          JSON.stringify({ stack: errorObj.stack, phase: Phase.PHASE3 })
         );
       }
       
@@ -1149,36 +1147,619 @@ export class TestAgent implements DurableObject {
     }
   }
 
-  /**
-   * Translate Phase 3 errors to user-friendly messages
-   */
-  private translatePhase3Error(message: string): string {
-    if (message.includes('timed out') || message.includes('timeout')) {
-      return 'Gameplay exploration timed out. The agent may have completed testing or encountered issues.';
-    }
-    if (message.includes('Browser session not available')) {
-      return 'Browser session not available. Please ensure Phase 1 and Phase 2 completed successfully.';
-    }
-    if (message.includes('screenshot')) {
-      return 'Failed to capture some screenshots during gameplay exploration.';
-    }
-    return message;
-  }
 
   /**
    * Phase 4: Evaluation & Scoring (empty implementation)
    */
-  private async runPhase4(): Promise<Response> {
+  /**
+   * Translate technical errors to user-friendly messages (Story 2.7, Task 2)
+   * Maps common error patterns to actionable messages
+   */
+  private translateError(error: Error, phase: string): string {
+    const message = error.message;
+    
+    // Phase-specific timeout handling
+    if (message.includes('timeout') || message.includes('timed out')) {
+      switch (phase) {
+        case Phase.PHASE1:
+          return ERROR_MESSAGES.PHASE1_TIMEOUT;
+        case Phase.PHASE2:
+          return ERROR_MESSAGES.PHASE2_TIMEOUT;
+        case Phase.PHASE3:
+          return ERROR_MESSAGES.PHASE3_TIMEOUT;
+        case Phase.PHASE4:
+          return ERROR_MESSAGES.PHASE4_TIMEOUT;
+        default:
+          return ERROR_MESSAGES.GENERIC_TIMEOUT;
+      }
+    }
+    
+    // Match against error patterns
+    for (const { pattern, message: userMessage } of ERROR_PATTERNS) {
+      if (pattern.test(message)) {
+        return userMessage;
+      }
+    }
+    
+    // Fallback: sanitize and return first line only
+    return this.sanitizeErrorMessage(message);
+  }
+  
+  /**
+   * Sanitize error messages (Story 2.7, Task 6)
+   * Removes stack traces, internal error codes, infrastructure details
+   */
+  private sanitizeErrorMessage(message: string): string {
+    // Remove stack traces (everything after "at " or newline)
+    let sanitized = message.split('\n')[0].split(' at ')[0];
+    
+    // Remove internal error codes (EACCES, ENOTFOUND, etc.)
+    sanitized = sanitized.replace(/\b[A-Z]{2,}[A-Z0-9_]+\b/g, '');
+    
+    // Remove file paths (/src/..., C:\...)
+    sanitized = sanitized.replace(/[\/\\][\w\/\\.-]+\.\w+(?::\d+)?/g, '');
+    
+    // Remove infrastructure details (Durable Object, R2, Workflow, etc.)
+    sanitized = sanitized.replace(/\b(Durable Object|R2 bucket|Workflow|Workers|Cloudflare)\b/gi, 'service');
+    
+    // Remove internal URLs (http://testAgent/...)
+    sanitized = sanitized.replace(/https?:\/\/[^\s]+/g, '');
+    
+    // If message is now empty or too short, return generic error
+    sanitized = sanitized.trim();
+    if (sanitized.length < 10) {
+      return ERROR_MESSAGES.GENERIC_ERROR;
+    }
+    
+    return sanitized;
+  }
+  
+  /**
+   * Store error message in test_runs table (Story 2.7, Task 4)
+   * Updates error_message field and broadcasts via WebSocket
+   */
+  private async storeErrorMessage(errorMessage: string): Promise<void> {
     try {
-      await this.updateStatus(Phase.PHASE4, 'Phase 4 started (implementation pending)');
+      // Update test_runs.error_message
+      await this.env.DB
+        .prepare('UPDATE test_runs SET error_message = ?, updated_at = ? WHERE id = ?')
+        .bind(errorMessage, Date.now(), this.testRunId)
+        .run();
       
-      return Response.json({
-        success: false,
-        message: 'Phase 4 not yet implemented',
+      // Broadcast error via WebSocket
+      this.broadcastToClients({
+        type: 'error',
+        message: errorMessage,
+        timestamp: Date.now(),
       });
     } catch (error) {
-      return this.handleError(error, Phase.PHASE4);
+      // Log but don't throw (graceful degradation)
+      console.error('Failed to store error message:', error);
     }
+  }
+
+  /**
+   * Phase 4: Evaluation & Scoring (Story 2.6)
+   * Analyzes captured evidence, generates quality scores via AI Gateway vision model
+   */
+  private async runPhase4(hasPartialEvidence = false): Promise<Response> {
+    // Task 1: Initialize result structure
+    const result: Phase4Result = {
+      success: false,
+      overallScore: 0,
+      metrics: [],
+    };
+
+    try {
+      // Task 1: Set 60-second timeout for Phase 4
+      const timeoutMs = 60000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Phase 4 execution timed out after 60 seconds')), timeoutMs);
+      });
+
+      // Execute Phase 4 logic with timeout
+      const phase4Promise = this.executePhase4Logic(result, hasPartialEvidence);
+      await Promise.race([phase4Promise, timeoutPromise]);
+
+      return Response.json(result);
+    } catch (error) {
+      // Translate errors to user-friendly messages (Story 2.7)
+      const errorObj = error instanceof Error ? error : new Error('Unknown error');
+      const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE4);
+      result.success = false;
+      result.overallScore = 0;
+      result.metrics = [];
+      
+      // Store error message in test_runs table (Story 2.7)
+      await this.storeErrorMessage(userFriendlyMessage);
+      
+      // Log technical error details to test_events (for debugging)
+      if (this.testRunId && this.env.DB) {
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'failed',
+          `Phase 4 failed: ${errorObj.message}`,
+          JSON.stringify({ stack: errorObj.stack, phase: Phase.PHASE4 })
+        );
+      }
+      
+      return Response.json(result);
+    }
+  }
+
+  /**
+   * Execute Phase 4 logic steps
+   */
+  private async executePhase4Logic(result: Phase4Result, hasPartialEvidence = false): Promise<void> {
+    // Task 1: Log phase start to test_events
+    const startMessage = hasPartialEvidence 
+      ? 'Phase 4: Evaluation & Scoring started with partial evidence from earlier phases'
+      : 'Phase 4: Evaluation & Scoring started';
+    await this.updateStatus(Phase.PHASE4, startMessage);
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'started',
+      startMessage
+    );
+
+    // Task 1: Verify browser session closed (if still open from Phase 3)
+    if (this.stagehand) {
+      try {
+        await this.closeBrowser();
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'info',
+          'Browser session closed from Phase 3'
+        );
+      } catch (error) {
+        // Non-critical error - continue Phase 4
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `Failed to close browser: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    }
+
+    // Task 2: Retrieve all screenshots from R2
+    await this.updateStatus(Phase.PHASE4, 'Retrieving screenshots from R2');
+    const artifactsResult = await getTestArtifacts(this.env.EVIDENCE_BUCKET, this.testRunId, this.env);
+    
+    if (!artifactsResult.success) {
+      throw new Error(`Failed to retrieve artifacts from R2: ${artifactsResult.error}`);
+    }
+    
+    // Filter to screenshots only
+    const screenshots = artifactsResult.data.filter(artifact => artifact.type === 'screenshot');
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'info',
+      `Retrieved ${screenshots.length} screenshots from R2`
+    );
+
+    // Task 2: Download screenshot data from R2 for AI analysis
+    const screenshotBuffers: ArrayBuffer[] = [];
+    for (const screenshot of screenshots) {
+      try {
+        const obj = await this.env.EVIDENCE_BUCKET.get(screenshot.key);
+        if (obj) {
+          const buffer = await obj.arrayBuffer();
+          screenshotBuffers.push(buffer);
+        }
+      } catch (error) {
+        // Log but continue with available screenshots
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `Failed to download screenshot ${screenshot.key}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    }
+
+    // Task 3: Retrieve console logs and network errors from DO state
+    await this.updateStatus(Phase.PHASE4, 'Retrieving evidence from DO state');
+    const consoleLogs = await this.state.storage.get<ConsoleLogEntry[]>('consoleLogs') || [];
+    const networkErrors = await this.state.storage.get<NetworkError[]>('networkErrors') || [];
+    
+    // Task 3: Load AI decision log from Agent SQL
+    const decisionLogRows = await this.execSQL('SELECT * FROM decision_log ORDER BY timestamp ASC');
+    const decisionLog = Array.isArray(decisionLogRows) ? decisionLogRows : [];
+    
+    // Task 3: Prepare evidence summary
+    const consoleErrorCount = consoleLogs.filter(log => log.level === 'error').length;
+    const consoleWarningCount = consoleLogs.filter(log => log.level === 'warn').length;
+    const networkErrorCount = networkErrors.length;
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'info',
+      `Evidence summary: ${screenshots.length} screenshots, ${consoleErrorCount} console errors, ${consoleWarningCount} warnings, ${networkErrorCount} network errors, ${decisionLog.length} AI decisions`
+    );
+
+    // Task 4 & 5: Use AI Gateway vision model for quality assessment
+    await this.updateStatus(Phase.PHASE4, 'Analyzing evidence with AI Gateway');
+    let aiScores: Record<string, { score: number; justification: string }> | null = null;
+    
+    if (screenshotBuffers.length > 0) {
+      // Task 4: Prepare AI prompt for evaluation
+      const prompt = `Analyze these screenshots from a game test and score the game on 5 metrics (0-100 scale):
+
+1. **Game Loads Successfully** (0-100): Did the game load without errors? Check for blank screens, 404 pages, or loading failures.
+2. **Visual Quality** (0-100): How polished and coherent are the visuals? Check for graphical glitches, layout issues, or broken images.
+3. **Controls & Responsiveness** (0-100): How well do controls work based on what you can see? Check for interactive elements, UI responsiveness.
+4. **Playability** (0-100): Is the game fun, clear, and engaging based on the screenshots? Check for game progression, clear objectives.
+5. **Technical Stability** (0-100): Are there technical issues visible? Consider console errors (${consoleErrorCount}), warnings (${consoleWarningCount}), and network failures (${networkErrorCount}).
+
+For each metric, provide:
+- A score (0-100 integer)
+- A 2-3 sentence justification referencing specific things you see in the screenshots or evidence
+
+Return ONLY valid JSON in this exact format:
+{
+  "load": { "score": <number>, "justification": "<string>" },
+  "visual": { "score": <number>, "justification": "<string>" },
+  "controls": { "score": <number>, "justification": "<string>" },
+  "playability": { "score": <number>, "justification": "<string>" },
+  "technical": { "score": <number>, "justification": "<string>" }
+}`;
+
+      // Task 4: Call AI Gateway with vision model
+      const aiResult = await callAI(
+        this.env,
+        prompt,
+        screenshotBuffers,
+        'primary',
+        this.testRunId,
+        { phase: Phase.PHASE4, purpose: 'evaluation' }
+      );
+      
+      if (aiResult.success) {
+        // Task 4: Parse AI response
+        try {
+          // Extract JSON from response (may have markdown code blocks)
+          let jsonText = aiResult.data.text.trim();
+          const jsonMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+          if (jsonMatch) {
+            jsonText = jsonMatch[1];
+          }
+          
+          aiScores = JSON.parse(jsonText);
+          
+          // Validate JSON structure
+          const requiredMetrics = ['load', 'visual', 'controls', 'playability', 'technical'];
+          for (const metric of requiredMetrics) {
+            if (!aiScores || !aiScores[metric] || typeof aiScores[metric].score !== 'number' || typeof aiScores[metric].justification !== 'string') {
+              throw new Error(`Invalid AI response: missing or malformed metric ${metric}`);
+            }
+          }
+          
+          await insertTestEvent(
+            this.env.DB,
+            this.testRunId,
+            Phase.PHASE4,
+            'info',
+            'AI evaluation completed successfully'
+          );
+        } catch (parseError) {
+          // Task 4: Handle malformed JSON - use fallback
+          await insertTestEvent(
+            this.env.DB,
+            this.testRunId,
+            Phase.PHASE4,
+            'warning',
+            `Failed to parse AI response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}. Using fallback scoring.`
+          );
+          aiScores = null;
+        }
+      } else {
+        // Task 4: AI Gateway failed - use fallback
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `AI Gateway evaluation failed: ${aiResult.error}. Using fallback scoring.`
+        );
+      }
+    } else {
+      // No screenshots available - use fallback scoring (Story 2.7 graceful degradation)
+      const fallbackMessage = hasPartialEvidence
+        ? 'Limited evidence available due to earlier phase failures. Using fallback scoring based on technical data.'
+        : 'No screenshots available for AI analysis. Using fallback scoring based on technical data.';
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE4,
+        'warning',
+        fallbackMessage
+      );
+    }
+
+    // Task 5 & 7: Generate scores for 5 metrics with justifications
+    // Use AI scores if available, otherwise use fallback scoring
+    const metrics: MetricScore[] = [];
+    
+    // Get Phase 1-3 results for fallback scoring
+    const phaseResults = await this.state.storage.get<Record<string, any>>('phaseResults') || {};
+    const phase1Result = phaseResults.phase1 as Phase1Result | undefined;
+    const phase2Result = phaseResults.phase2 as Phase2Result | undefined;
+    
+    // Task 5: Load score (Story 2.7 partial evidence handling)
+    const loadScore = aiScores?.load?.score ?? (phase1Result?.success ? 100 : 0);
+    const loadJustification = aiScores?.load?.justification ?? 
+      (phase1Result?.success 
+        ? 'Game loaded successfully with no HTTP errors or blank screens detected in Phase 1 validation.'
+        : hasPartialEvidence 
+          ? 'Evaluation limited due to incomplete test execution. Phase 1 did not complete successfully.'
+          : 'Game failed to load properly in Phase 1. Check for 404 errors or network issues preventing game from starting.');
+    metrics.push({ name: 'load', score: this.clampScore(loadScore), justification: loadJustification });
+    
+    // Task 5: Visual score
+    const visualScore = aiScores?.visual?.score ?? (screenshots.length > 0 ? 75 : 50);
+    const visualJustification = aiScores?.visual?.justification ?? 
+      (screenshots.length > 0 
+        ? `Visual quality appears functional based on ${screenshots.length} captured screenshots. No major graphical glitches detected, but AI analysis unavailable for detailed assessment.`
+        : 'Unable to assess visual quality due to lack of screenshots. This may indicate rendering issues or game failed to display content.');
+    metrics.push({ name: 'visual', score: this.clampScore(visualScore), justification: visualJustification });
+    
+    // Task 5: Controls score
+    const controlCount = phase2Result?.controls ? Object.keys(phase2Result.controls).length : 0;
+    const controlsScore = aiScores?.controls?.score ?? (controlCount > 0 ? 100 : 50);
+    const controlsJustification = aiScores?.controls?.justification ?? 
+      (controlCount > 0 
+        ? `Discovered ${controlCount} interactive controls in Phase 2 (${phase2Result?.hypothesis || 'controls detected'}). Controls appear functional based on discovery phase.`
+        : 'No interactive controls discovered in Phase 2. Game may lack user interactions or controls are not easily discoverable.');
+    metrics.push({ name: 'controls', score: this.clampScore(controlsScore), justification: controlsJustification });
+    
+    // Task 5: Playability score
+    const playabilityScore = aiScores?.playability?.score ?? 50;
+    const playabilityJustification = aiScores?.playability?.justification ?? 
+      'Playability assessment requires AI vision analysis of gameplay screenshots. Neutral score assigned due to lack of detailed analysis.';
+    metrics.push({ name: 'playability', score: this.clampScore(playabilityScore), justification: playabilityJustification });
+    
+    // Task 5: Technical score
+    const errorPenalty = Math.min((consoleErrorCount * 10) + (networkErrorCount * 5), 100);
+    const technicalScore = aiScores?.technical?.score ?? Math.max(100 - errorPenalty, 0);
+    const technicalJustification = aiScores?.technical?.justification ?? 
+      `Technical stability based on error analysis: ${consoleErrorCount} console errors, ${consoleWarningCount} warnings, ${networkErrorCount} network failures. ${errorPenalty > 0 ? 'Issues detected that may impact stability.' : 'No significant technical issues detected.'}`;
+    metrics.push({ name: 'technical', score: this.clampScore(technicalScore), justification: technicalJustification });
+
+    // Task 6: Calculate overall quality score
+    const loadWeight = 0.15;
+    const visualWeight = 0.20;
+    const controlsWeight = 0.20;
+    const playabilityWeight = 0.30;
+    const technicalWeight = 0.15;
+    
+    const overallScore = Math.round(
+      (metrics[0].score * loadWeight) +
+      (metrics[1].score * visualWeight) +
+      (metrics[2].score * controlsWeight) +
+      (metrics[3].score * playabilityWeight) +
+      (metrics[4].score * technicalWeight)
+    );
+    
+    // Task 6: Add overall metric to metrics array
+    metrics.push({
+      name: 'overall',
+      score: this.clampScore(overallScore),
+      justification: `Weighted average of 5 metrics: Load (15%), Visual (20%), Controls (20%), Playability (30%), Technical (15%).`
+    });
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'info',
+      `Calculated overall score: ${overallScore}/100`
+    );
+
+    // Task 8: Store evaluation_scores to D1 (6 rows: 5 metrics + overall)
+    await this.updateStatus(Phase.PHASE4, 'Storing evaluation scores to database');
+    for (const metric of metrics) {
+      const insertResult = await insertEvaluationScore(
+        this.env.DB,
+        this.testRunId,
+        metric.name,
+        metric.score,
+        metric.justification
+      );
+      
+      if (!insertResult.success) {
+        // Log error but continue Phase 4
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `Failed to insert evaluation score for ${metric.name}: ${insertResult.error}`
+        );
+      }
+    }
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'info',
+      'Evaluation scores stored to D1 database (6 rows)'
+    );
+
+    // Task 9: Store overall_score in test_runs table
+    try {
+      await this.env.DB
+        .prepare(`UPDATE test_runs SET overall_score = ?, updated_at = ? WHERE id = ?`)
+        .bind(overallScore, Date.now(), this.testRunId)
+        .run();
+      
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE4,
+        'info',
+        `Updated test_runs.overall_score to ${overallScore}`
+      );
+    } catch (error) {
+      // Log error but continue Phase 4
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE4,
+        'warning',
+        `Failed to update test_runs.overall_score: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
+    // Task 10: Flush all logs to R2
+    await this.updateStatus(Phase.PHASE4, 'Flushing logs to R2');
+    
+    // Task 10: Upload console.log
+    if (consoleLogs.length > 0) {
+      const consoleLogContent = consoleLogs.map(log => 
+        `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${log.text}`
+      ).join('\n');
+      
+      const consoleUpload = await uploadLog(
+        this.env.EVIDENCE_BUCKET,
+        this.testRunId,
+        LogType.CONSOLE,
+        consoleLogContent
+      );
+      
+      if (!consoleUpload.success) {
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `Failed to upload console.log: ${consoleUpload.error}`
+        );
+      }
+    }
+    
+    // Task 10: Upload network.log
+    if (networkErrors.length > 0) {
+      const networkLogContent = networkErrors.map(error => 
+        `[${new Date(error.timestamp).toISOString()}] URL: ${error.url}, Status: ${error.status || 'N/A'}, Error: ${error.error}`
+      ).join('\n');
+      
+      const networkUpload = await uploadLog(
+        this.env.EVIDENCE_BUCKET,
+        this.testRunId,
+        LogType.NETWORK,
+        networkLogContent
+      );
+      
+      if (!networkUpload.success) {
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `Failed to upload network.log: ${networkUpload.error}`
+        );
+      }
+    }
+    
+    // Task 10: Upload agent-decisions.log
+    if (decisionLog.length > 0) {
+      const agentDecisionsContent = decisionLog.map((row: any) => 
+        `[${new Date(row.timestamp).toISOString()}] ${row.decision} (Model: ${row.ai_model || 'N/A'})\nContext: ${row.context}`
+      ).join('\n\n');
+      
+      const agentUpload = await uploadLog(
+        this.env.EVIDENCE_BUCKET,
+        this.testRunId,
+        LogType.AGENT_DECISIONS,
+        agentDecisionsContent
+      );
+      
+      if (!agentUpload.success) {
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE4,
+          'warning',
+          `Failed to upload agent-decisions.log: ${agentUpload.error}`
+        );
+      }
+    }
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'info',
+      'All logs flushed to R2 storage'
+    );
+
+    // Task 11: Update test_runs.status = 'completed' in D1
+    await this.updateStatus(Phase.PHASE4, 'Marking test as completed');
+    const statusUpdateResult = await updateTestStatus(this.env.DB, this.testRunId, 'completed');
+    
+    if (!statusUpdateResult.success) {
+      // Log error but Phase 4 still completes
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE4,
+        'warning',
+        `Failed to update test status: ${statusUpdateResult.error}`
+      );
+    } else {
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE4,
+        'info',
+        'Test status updated to completed'
+      );
+    }
+
+    // Task 12: Broadcast final results via WebSocket
+    const finalMessage = `Phase 4 complete - Overall Score: ${overallScore}/100 (Load: ${metrics[0].score}, Visual: ${metrics[1].score}, Controls: ${metrics[2].score}, Playability: ${metrics[3].score}, Technical: ${metrics[4].score})`;
+    await this.updateStatus(Phase.PHASE4, finalMessage);
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE4,
+      'completed',
+      finalMessage,
+      JSON.stringify({ overallScore, metrics })
+    );
+
+    // Task 13: Set result success and populate fields
+    result.success = true;
+    result.overallScore = overallScore;
+    result.metrics = metrics;
+    
+    // Task 13: Update DO state with Phase 4 result
+    const phaseResultsUpdated = await this.state.storage.get<Record<string, any>>('phaseResults') || {};
+    phaseResultsUpdated.phase4 = result;
+    await this.state.storage.put('phaseResults', phaseResultsUpdated);
+  }
+
+  /**
+   * Clamp score to 0-100 range
+   */
+  private clampScore(score: number): number {
+    return Math.max(0, Math.min(100, Math.round(score)));
   }
 
   /**

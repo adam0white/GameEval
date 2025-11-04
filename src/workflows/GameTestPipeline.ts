@@ -116,7 +116,7 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
       ) as PhaseResult;
 
       // Step 5: Phase 4 - Evaluation & Scoring (60s timeout)
-      // Continue even if earlier phases failed (graceful degradation)
+      // Continue even if earlier phases failed (graceful degradation - Story 2.7)
       const phase4Result = await step.do(
         'phase4-evaluation-scoring',
         {
@@ -128,7 +128,25 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
           },
         },
         async () => {
+          // Determine if we have partial evidence from earlier phases (Story 2.7, AC #3, #4)
           const hasPartialEvidence = phase1Result.success || phase2Result.success || phase3Result.success;
+          
+          // Log graceful degradation if earlier phases failed
+          if (!phase1Result.success || !phase2Result.success || !phase3Result.success) {
+            const failedPhases = [];
+            if (!phase1Result.success) failedPhases.push('Phase 1');
+            if (!phase2Result.success) failedPhases.push('Phase 2');
+            if (!phase3Result.success) failedPhases.push('Phase 3');
+            
+            await insertTestEvent(
+              this.env.DB,
+              testRunId,
+              'workflow',
+              'info',
+              `Graceful degradation: ${failedPhases.join(', ')} failed, continuing to Phase 4 with partial evidence`
+            );
+          }
+          
           const result = await this.executePhase(
             testRunId, 
             Phase.PHASE4, 
@@ -139,11 +157,11 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
         }
       ) as PhaseResult;
 
-      // Check if all phases succeeded
+      // Check if all phases succeeded (Story 2.7 graceful degradation)
       const allPhasesSucceeded = phase1Result.success && phase2Result.success && 
                                   phase3Result.success && phase4Result.success;
 
-      // Update final status
+      // Update final status with proper error message handling
       if (allPhasesSucceeded) {
         await updateTestStatus(this.env.DB, testRunId, TestStatus.COMPLETED);
         await insertTestEvent(
@@ -159,7 +177,7 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
           testRunId,
         };
       } else {
-        // Graceful degradation: Some phases failed but Phase 4 ran with partial evidence
+        // Graceful degradation (Story 2.7, AC #3, #4, #5)
         const failedPhases = [];
         if (!phase1Result.success) failedPhases.push('Phase 1');
         if (!phase2Result.success) failedPhases.push('Phase 2');
@@ -168,6 +186,12 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
         const message = phase4Result.success
           ? `Test completed with partial results. ${failedPhases.join(', ')} failed, but evaluation completed with available evidence.`
           : `Test failed. ${failedPhases.join(', ')} and Phase 4 failed.`;
+
+        // Store error message in test_runs table (Story 2.7, AC #6)
+        await this.env.DB
+          .prepare('UPDATE test_runs SET error_message = ?, updated_at = ? WHERE id = ?')
+          .bind(message, Date.now(), testRunId)
+          .run();
 
         await updateTestStatus(this.env.DB, testRunId, TestStatus.FAILED);
         await insertTestEvent(
@@ -185,8 +209,14 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
         };
       }
     } catch (error) {
-      // Global error handler for unexpected failures
+      // Global error handler for unexpected failures (Story 2.7)
       const userFriendlyError = formatUserFriendlyError(error);
+      
+      // Store error message in test_runs table (Story 2.7, AC #6)
+      await this.env.DB
+        .prepare('UPDATE test_runs SET error_message = ?, updated_at = ? WHERE id = ?')
+        .bind(userFriendlyError, Date.now(), testRunId)
+        .run();
       
       await updateTestStatus(this.env.DB, testRunId, TestStatus.FAILED);
       await insertTestEvent(
@@ -194,7 +224,8 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
         testRunId,
         'workflow',
         'failed',
-        userFriendlyError
+        userFriendlyError,
+        JSON.stringify({ originalError: error instanceof Error ? error.message : 'Unknown error' })
       );
 
       return {
