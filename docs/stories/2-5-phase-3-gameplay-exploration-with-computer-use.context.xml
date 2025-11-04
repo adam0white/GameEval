@@ -1,0 +1,147 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.5</storyId>
+    <title>Phase 3 - Gameplay Exploration with Computer Use</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-5-phase-3-gameplay-exploration-with-computer-use.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>TestAgent</asA>
+    <iWant>to autonomously play the game using Stagehand Computer Use mode</iWant>
+    <soThat>I can evaluate gameplay quality and capture evidence</soThat>
+    <tasks>
+      <task id="1" ac="1">Implement `runPhase3()` Method Structure</task>
+      <task id="2" ac="2">Initialize Stagehand Computer Use Mode</task>
+      <task id="3" ac="3">Execute Goal-Driven Actions</task>
+      <task id="4" ac="4">Detect and Click "Play" Button Autonomously</task>
+      <task id="5" ac="5">Agent Decision Logic for Keyboard vs Mouse Controls</task>
+      <task id="6" ac="6,7">Screenshot Capture Every 10 Seconds or on State Change</task>
+      <task id="7" ac="8">Continuous Console Log Monitoring</task>
+      <task id="8" ac="9">Track Failed Network Requests</task>
+      <task id="9" ac="10">Log AI Decisions to Agent SQL Database</task>
+      <task id="10" ac="11">Store Screenshots to R2 Incrementally</task>
+      <task id="11" ac="12">Implement Adaptive Timeout</task>
+      <task id="12" ac="13">Broadcast Progress via WebSocket Every 15 Seconds</task>
+      <task id="13" ac="14">Return Phase3Result Structure</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criteria id="1">`runPhase3()` method implemented: Method exists in TestAgent class and executes Phase 3 logic</criteria>
+    <criteria id="2">Use Stagehand agent in Computer Use mode for autonomous exploration: Initialize Stagehand agent with Computer Use mode for goal-driven autonomous actions</criteria>
+    <criteria id="3">Execute goal-driven actions: Agent executes high-level goals: "Start the game", "Learn the controls", "Play for 2-3 minutes"</criteria>
+    <criteria id="4">If game requires interaction, detect and click "Play" button autonomously: Detect if game requires user interaction from Phase 1 result, then autonomously click "Play" or "Start" button</criteria>
+    <criteria id="5">Agent decides between keyboard and mouse controls: Agent makes autonomous decisions about using keyboard vs mouse controls based on observations or inputSchema</criteria>
+    <criteria id="6">Capture screenshot every 10 seconds OR on significant state change (minimum 5 screenshots): Screenshots captured at regular intervals or when game state changes significantly</criteria>
+    <criteria id="7">Screenshot naming: Screenshots saved with pattern `{timestamp}-phase3-{action-description}.png` using `captureScreenshot()` helper</criteria>
+    <criteria id="8">Monitor console logs continuously: Console errors and warnings captured and accumulated in DO state throughout Phase 3</criteria>
+    <criteria id="9">Track failed network requests: Network requests with status >= 400 or connection failures tracked in DO state</criteria>
+    <criteria id="10">Log all AI decisions to DO SQL database: Every AI decision logged to Agent SQL `decision_log` table with timestamp, decision, action, and outcome</criteria>
+    <criteria id="11">Store screenshots to R2 incrementally: Screenshots saved to R2 immediately after capture (don't batch until end)</criteria>
+    <criteria id="12">Adaptive timeout: minimum 1 minute, maximum 5 minutes (stop when no new discoveries): Phase 3 execution adapts timeout based on progress (stops if no progress for 30 seconds)</criteria>
+    <criteria id="13">Broadcast progress via WebSocket every 15 seconds: Progress updates sent to dashboard every 15 seconds with current action description</criteria>
+    <criteria id="14">Return Phase3Result: Return `{ success: true, screenshotCount: number, errors: string[], actionsTaken: number }` structure</criteria>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-2-ai-test-agent-browser-automation.md" title="Epic 2: AI Test Agent & Browser Automation" section="Story 2.5" snippet="Story 2.5 implements Phase 3 of the test execution pipeline - Gameplay Exploration with Computer Use. This story builds on Story 2.4's Phase 2 control discovery to autonomously explore and play the game using Stagehand's Computer Use mode." />
+      <doc path="docs/epic-2-tech-context.md" title="Epic 2 Technical Specification" section="Phase 3 Handler" snippet="Phase 3 Handler (`runPhase3()`): Autonomous gameplay exploration via Computer Use mode. Adapts timeout: minimum 1 minute, maximum 5 minutes (stops if no progress for 30 seconds)." />
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="FR-2.3 Phase 3: Gameplay Exploration" snippet="Use Stagehand agent in Computer Use mode for autonomous exploration. Execute goal-driven actions: 'Try to start the game', 'Test main controls', 'Explore game mechanics'. Capture evidence continuously throughout gameplay." />
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.5 Stagehand Integration" snippet="Computer Use Mode for Gameplay (Phase 3): TestAgent uses Stagehand agent with high-level goals: 'Start the game', 'Learn controls', 'Play for 2-3 minutes'. Stagehand agent autonomously decides specific actions (clicks, typing, keyboard, scrolling)." />
+      <doc path="docs/architecture/novel-pattern-designs.md" title="Novel Pattern Designs" section="Pattern 1" snippet="TestAgent.runPhase3() - Gameplay Exploration: Stagehand Computer Use mode activates. Agent executes gameplay actions. Screenshots captured every 10 seconds (minimum 5). Console logs and network errors tracked. AI decisions logged to Agent SQL." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-002" snippet="Single TestAgent Durable Object Per Test: Each test run is managed by one TestAgent Durable Object instance (DO ID = test UUID), persisting across all 4 phases and retries. Browser session persists across phases (faster, maintains game state)." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-003" snippet="Workflow Auto-Retry with TestAgent Error Awareness: Phase 3 failures trigger workflow retry. TestAgent receives error context to try adaptive strategies on retry attempts." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-004" snippet="AI Gateway as Primary Entry Point for All AI Requests: Stagehand AI calls routed through AI Gateway. Provides unified observability, cost tracking, automatic failover." />
+      <doc path="docs/architecture/technology-stack-details.md" title="Technology Stack Details" section="Browser Automation" snippet="Stagehand: AI-powered browser control library. Computer Use mode: autonomous gameplay. Screenshot capture: programmatic control. All TestAgent AI calls routed through gateway." />
+      <doc path="docs/ai-gateway-usage.md" title="AI Gateway Usage Guide" section="Vision Request" snippet="Use callAI() helper with images array for vision model requests. AI Gateway automatically routes to Workers AI (primary) or OpenAI (fallback). All requests logged to test_events table with cost tracking." />
+      <doc path="docs/stories/2-4-phase-2-control-discovery.md" title="Story 2.4: Phase 2 - Control Discovery" section="Learnings" snippet="Browser session persists from Phase 1-2 - reuse existing Stagehand instance from `this.stagehand`. Discovered controls available in `this.state.discoveredControls` from Phase 2 - use to guide Phase 3 gameplay decisions." />
+    </docs>
+    <code>
+      <artifact path="src/agents/TestAgent.ts" kind="durable-object" symbol="TestAgent" lines="1-461" reason="TestAgent class implements Phase 3 method `runPhase3()`. Contains helper methods: `updateStatus()`, `storeEvidence()`, `captureScreenshot()` (from Story 2.2). Agent SQL initialization with decision_log table already exists." />
+      <artifact path="src/agents/TestAgent.ts" kind="method" symbol="runPhase3()" lines="265-279" reason="Phase 3 method stub - needs full implementation with Stagehand Computer Use mode, goal-driven actions, screenshot capture, AI decision logging, and adaptive timeout logic." />
+      <artifact path="src/agents/TestAgent.ts" kind="method" symbol="updateStatus()" lines="300-328" reason="Helper method for logging to D1 test_events and broadcasting via WebSocket. Use for Phase 3 progress updates every 15 seconds." />
+      <artifact path="src/agents/TestAgent.ts" kind="method" symbol="storeEvidence()" lines="333-402" reason="Helper method for saving screenshots/logs to R2 and tracking in DO state. Screenshots are stored incrementally during Phase 3." />
+      <artifact path="src/agents/TestAgent.ts" kind="method" symbol="initializeSQL()" lines="189-231" reason="Agent SQL database initialization. decision_log table already created (lines 216-224). Use for logging AI decisions during Phase 3 gameplay." />
+      <artifact path="src/shared/types.ts" kind="interface" symbol="Phase3Result" lines="1-200" reason="Phase3Result interface needs to be added to types.ts. Structure: `{ success: boolean, screenshotCount: number, errors: string[], actionsTaken: number }`" />
+      <artifact path="src/shared/types.ts" kind="interface" symbol="TestAgentState" lines="188-199" reason="TestAgentState interface includes phaseResults. Store Phase 3 result in `this.state.phaseResults.phase3` for reference in Phase 4." />
+      <artifact path="src/shared/helpers/ai-gateway.ts" kind="function" symbol="callAI()" lines="1-326" reason="AI Gateway helper for routing AI requests. Stagehand Computer Use mode may use AI Gateway for autonomous decisions. Use for Phase 3 AI decision routing if needed." />
+      <artifact path="src/shared/helpers/r2.ts" kind="function" symbol="uploadScreenshot()" lines="1-200" reason="R2 screenshot upload helper. Screenshots saved immediately during Phase 3 (incremental storage, not batched)." />
+      <artifact path="src/shared/constants.ts" kind="constant" symbol="Phase.PHASE3" lines="1-50" reason="Phase constants for phase tracking. Use Phase.PHASE3 for status updates and evidence categorization." />
+    </code>
+    <dependencies>
+      <node>
+        <package name="stagehand" version="latest">Browser automation library with Computer Use mode for autonomous gameplay exploration</package>
+        <package name="@cloudflare/workers-types" version="^4.0.0">TypeScript types for Workers APIs and Durable Objects</package>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-002: Single TestAgent Durable Object per test run (DO ID = test UUID). Browser session persists in DO state across phases 1-3.</constraint>
+    <constraint>ADR-003: Workflow Auto-Retry with TestAgent Error Awareness - Phase 3 failures trigger workflow retry with adaptive strategies.</constraint>
+    <constraint>ADR-004: AI Gateway as Primary Entry Point for All AI Requests - Stagehand AI calls routed through AI Gateway.</constraint>
+    <constraint>Pattern 1 (Novel Pattern Designs): Browser session persists in DO state across phases 1-3. Reuse existing Stagehand instance from `this.stagehand` (no need to launch new browser).</constraint>
+    <constraint>Timeout constraint: Phase 3 execution must complete within 1-5 minutes adaptive (stops if no progress for 30s).</constraint>
+    <constraint>Maximum workflow duration: 6 minutes total end-to-end, so Phase 3 can't exceed ~5 minutes.</constraint>
+    <constraint>Stagehand Computer Use mode: Agent autonomously decides mouse clicks, keyboard presses, scrolling. No manual action coordination needed.</constraint>
+    <constraint>RPC-only architecture: No exposed HTTP APIs, all communication via service bindings.</constraint>
+    <constraint>Agent SQL storage: Use built-in Agent SQL database for per-test AI decision logs (ephemeral data). decision_log table already exists.</constraint>
+    <constraint>Evidence capture: Screenshots, console logs, network errors, AI decision log accumulated throughout Phase 3. Screenshots stored to R2 incrementally (not batched).</constraint>
+    <constraint>WebSocket broadcasting: Progress updates sent every 15 seconds (rate limited to 1 event per 5 seconds maximum).</constraint>
+    <constraint>Error handling: All errors translated to user-friendly messages. Never expose stack traces or internal error codes.</constraint>
+    <constraint>InputSchema usage: InputSchema guides but doesn't restrict agent. Agent can explore beyond inputSchema if needed.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="TestAgent.runPhase3()" kind="method" signature="private async runPhase3(): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts">
+      Returns JSON Response with Phase3Result: `{ success: boolean, screenshotCount: number, errors: string[], actionsTaken: number }`
+    </interface>
+    <interface name="Stagehand Computer Use API" kind="library" signature="Stagehand agent with mode: 'computer-use'" path="src/agents/TestAgent.ts">
+      Stagehand agent initialized with Computer Use mode. Methods: `stagehand.do(goal)` for goal-driven autonomous actions. Agent autonomously decides clicks, typing, keyboard, scrolling.
+    </interface>
+    <interface name="Agent SQL decision_log table" kind="database" signature="CREATE TABLE decision_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, decision TEXT NOT NULL, action TEXT NOT NULL, outcome TEXT NOT NULL, context TEXT)" path="src/agents/TestAgent.ts">
+      Agent SQL database table for logging AI decisions. Columns: timestamp, decision (what agent decided), action (what action was taken), outcome (result of action), context (additional context as JSON string).
+    </interface>
+    <interface name="captureScreenshot() helper" kind="function" signature="private async captureScreenshot(description: string): Promise&lt;string&gt;" path="src/agents/TestAgent.ts">
+      Screenshot capture helper from Story 2.2. Saves screenshot to R2 with pattern `{timestamp}-phase3-{action-description}.png`. Returns R2 URL.
+    </interface>
+    <interface name="updateStatus() helper" kind="function" signature="private async updateStatus(phase: string, message: string): Promise&lt;void&gt;" path="src/agents/TestAgent.ts">
+      Helper method logs to D1 test_events and broadcasts via WebSocket. Use for Phase 3 progress updates every 15 seconds with current action description.
+    </interface>
+    <interface name="Phase3Result type" kind="interface" signature="interface Phase3Result { success: boolean; screenshotCount: number; errors: string[]; actionsTaken: number; }" path="src/shared/types.ts">
+      Phase3Result interface needs to be added to types.ts. Return type for runPhase3() method.
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Integration tests required for Phase 3 execution with real game URL. Test Stagehand Computer Use mode executes autonomous actions, screenshots captured at regular intervals (minimum 5), console logs and network errors captured, AI decisions logged to Agent SQL, status updates to D1, WebSocket broadcasts. Test different game types: games requiring interaction to start, keyboard-based games, mouse-based games, games with inputSchema provided, games with no clear controls. Test adaptive timeout behavior: minimum timeout (1 minute), maximum timeout (5 minutes), early stop on no progress (30 seconds no progress), timeout extension on progress. Test evidence capture: screenshot capture every 10 seconds, screenshot capture on state change, console log capture, network error capture, AI decision logging. Test graceful error handling: browser session not available, Stagehand initialization failure, screenshot capture failure, R2 storage failure. Verify user-friendly error messages.
+    </standards>
+    <locations>
+      <location>tests/testagent-integration.ts</location>
+      <location>tests/ai-gateway-test.ts</location>
+    </locations>
+    <ideas>
+      <test ac="1">Test runPhase3() method exists and executes Phase 3 logic</test>
+      <test ac="2">Test Stagehand agent initialized with Computer Use mode</test>
+      <test ac="3">Test agent executes goal-driven actions: "Start the game", "Learn the controls", "Play for 2-3 minutes"</test>
+      <test ac="4">Test autonomous detection and clicking of "Play" button when requiresInteraction=true from Phase 1</test>
+      <test ac="5">Test agent decides between keyboard and mouse controls based on discovered controls from Phase 2 and inputSchema</test>
+      <test ac="6">Test screenshot capture every 10 seconds OR on significant state change (minimum 5 screenshots)</test>
+      <test ac="7">Test screenshot naming pattern: `{timestamp}-phase3-{action-description}.png`</test>
+      <test ac="8">Test console logs captured continuously and accumulated in DO state</test>
+      <test ac="9">Test failed network requests (status >= 400) tracked in DO state</test>
+      <test ac="10">Test AI decisions logged to Agent SQL decision_log table with timestamp, decision, action, outcome</test>
+      <test ac="11">Test screenshots stored to R2 immediately after capture (incremental storage, not batched)</test>
+      <test ac="12">Test adaptive timeout: minimum 1 minute, maximum 5 minutes, stops if no progress for 30 seconds</test>
+      <test ac="13">Test progress broadcast via WebSocket every 15 seconds with current action description</test>
+      <test ac="14">Test Phase3Result returned with correct structure: `{ success: boolean, screenshotCount: number, errors: string[], actionsTaken: number }`</test>
+    </ideas>
+  </tests>
+</story-context>
+

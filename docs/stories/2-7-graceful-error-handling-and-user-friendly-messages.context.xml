@@ -1,0 +1,179 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>epic-2</epicId>
+    <storyId>2.7</storyId>
+    <title>Graceful Error Handling and User-Friendly Messages</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-7-graceful-error-handling-and-user-friendly-messages.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>TestAgent</asA>
+    <iWant>handle all failures gracefully with helpful error messages</iWant>
+    <soThat>users understand what went wrong without seeing stack traces</soThat>
+    <tasks>
+      <task id="1">Enhance Error Handling in All Phase Methods (AC: 1)
+        - Review existing error handling in runPhase1-4()
+        - Standardize error handling pattern across all phases
+        - Add phase context to errors</task>
+      <task id="2">Implement Error Translation Function (AC: 2)
+        - Create translateError() helper method
+        - Implement error pattern mappings (404, timeout, AI Gateway, network, browser)
+        - Add error translation constants
+        - Log original error details to D1 test_events</task>
+      <task id="3">Implement Graceful Degradation for Phase Failures (AC: 3, 4, 5)
+        - Enhance Workflow error handling (GameTestPipeline.ts)
+        - Implement Phase 1-2 failure logic (skip to Phase 4 with partial evidence)
+        - Implement Phase 3 failure logic (run Phase 4 with available evidence)
+        - Enhance Phase 4 to handle partial evidence
+        - Add evidence completeness tracking</task>
+      <task id="4">Store Error Messages in test_runs Table (AC: 6)
+        - Add error_message field to test_runs schema (if not exists)
+        - Update test_runs on error
+        - Verify error message broadcast via WebSocket</task>
+      <task id="5">Delegate Retry Logic to Workflow (AC: 7)
+        - Verify TestAgent reports failures clearly
+        - Review Workflow retry configuration
+        - Ensure TestAgent receives error context on retry
+        - Verify Workflow handles retry exhaustion</task>
+      <task id="6">Sanitize Error Messages (AC: 8)
+        - Create sanitizeErrorMessage() helper
+        - Apply sanitization to all error messages
+        - Preserve technical details in logs</task>
+      <task id="7">Add Error Handling Tests
+        - Test error translation
+        - Test graceful degradation
+        - Test error message storage
+        - Test error sanitization</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Wrap all phase methods in try-catch blocks: All phase methods (runPhase1-4) have comprehensive try-catch error handling</ac>
+    <ac id="2">Translate technical errors to user-friendly messages: Common error patterns mapped to actionable messages:
+      - "Game failed to load (404)" → "The game URL could not be accessed. Please check the URL is correct."
+      - "Timeout in Phase 3" → "The AI agent couldn't make progress playing the game. The game may require specific interactions we couldn't detect."
+      - "AI model unavailable" → "The AI evaluation service is temporarily unavailable. Please try again in a few minutes."</ac>
+    <ac id="3">If Phase 1-2 fail: skip to Phase 4 with partial evidence: Workflow and TestAgent coordinate to run Phase 4 with limited evidence (e.g., only technical errors, no screenshots)</ac>
+    <ac id="4">If Phase 3 fails: still run Phase 4 with whatever evidence was captured: Phase 4 executes even if Phase 3 failed, using available screenshots, logs, and observations</ac>
+    <ac id="5">If Phase 4 fails: store partial results with error message: Evaluation failure still stores available scores and justifications, with error message explaining limitation</ac>
+    <ac id="6">All error messages stored in test_runs table and broadcast via WebSocket: Error messages persisted to D1 test_runs.error_message field and broadcast to dashboard clients</ac>
+    <ac id="7">Retry logic delegated to Workflow: TestAgent reports failure details, Workflow decides retry (not TestAgent's responsibility)</ac>
+    <ac id="8">Never expose: stack traces, internal error codes, infrastructure details: All error messages sanitized before returning to users or storing in user-facing fields</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-2-ai-test-agent-browser-automation.md" title="Epic 2: AI Test Agent & Browser Automation" section="Story 2.7">
+        Story 2.7 Acceptance Criteria and technical notes for error handling implementation. Defines graceful degradation strategy and error message patterns.
+      </doc>
+      <doc path="docs/epic-2-tech-context.md" title="Epic 2 Technical Specification" section="Error Handling Flow">
+        Error handling flow diagram showing error translation, graceful degradation, and error message storage. Documents ADR-003: Workflow Auto-Retry with TestAgent Error Awareness.
+      </doc>
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="FR-2.5 Error Handling & Agent Resilience">
+        Requirements for error handling, graceful degradation, user-friendly messages, and retry logic. Specifies that all failures must return helpful, actionable error messages.
+      </doc>
+      <doc path="docs/architecture/consistency-rules.md" title="Consistency Rules" section="Error Handling">
+        Error handling strategy: two-tier approach with Workflow handling retries and timeouts, TestAgent translating errors. User-facing errors use UserFriendlyError class. Never expose stack traces, internal error codes, infrastructure details.
+      </doc>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-003">
+        Decision: Cloudflare Workflows handle automatic retry with exponential backoff, but TestAgent receives error context to try adaptive strategies on retry attempts. Graceful degradation: continue with partial data if retries exhausted.
+      </doc>
+    </docs>
+    <code>
+      <file path="src/agents/TestAgent.ts" kind="durable-object" symbol="TestAgent" lines="1-479" reason="Main TestAgent class - enhance error handling in all phase methods (runPhase1-4), add translateError() and sanitizeErrorMessage() helpers, enhance error logging and broadcasting">
+        TestAgent Durable Object with existing handleError() method (lines 438-474). Need to enhance with comprehensive error translation, sanitization, and graceful degradation support.
+      </file>
+      <file path="src/workflows/GameTestPipeline.ts" kind="workflow" symbol="GameTestPipeline" lines="1-395" reason="Workflow orchestration - enhance executePhase() to track phase failures, implement graceful degradation logic for Phase 4 execution with partial evidence">
+        GameTestPipeline workflow with existing error handling (lines 280-360) and formatUserFriendlyError() helper (lines 369-393). Need to enhance Phase 4 call logic to handle partial evidence from failed phases.
+      </file>
+      <file path="src/shared/constants.ts" kind="constants" symbol="ERROR_MESSAGES" lines="1-101" reason="Add error message constants and error pattern regexes for error translation">
+        Constants file with ERROR_MESSAGES placeholder (lines 5-10). Need to add comprehensive error message mappings and regex patterns.
+      </file>
+      <file path="src/shared/types.ts" kind="types" symbol="PhaseResult" lines="1-200" reason="Add error-related types (ErrorContext interface, error response type structure) if needed">
+        Type definitions including PhaseResult interface (lines 176-183). May need to add ErrorContext interface for future enhancement.
+      </file>
+      <file path="src/shared/helpers/d1.ts" kind="helper" symbol="insertTestEvent" lines="144-183" reason="Helper for logging errors to D1 test_events - used for error logging with metadata">
+        insertTestEvent() function for logging events to D1. Used for error logging with technical details in metadata field.
+      </file>
+      <file path="src/shared/helpers/d1.ts" kind="helper" symbol="updateTestStatus" lines="107-132" reason="Helper for updating test_runs.status - may need to extend to update error_message field">
+        updateTestStatus() function for updating test run status. May need to extend to also update error_message field.
+      </file>
+      <file path="src/shared/helpers/r2.ts" kind="helper" symbol="uploadScreenshot" lines="138-162" reason="Helper for uploading screenshots to R2 - used during error handling to preserve evidence">
+        uploadScreenshot() function for saving evidence to R2. Used during graceful degradation to preserve available evidence.
+      </file>
+      <file path="src/shared/helpers/ai-gateway.ts" kind="helper" symbol="callAI" lines="48-106" reason="AI Gateway helper - may need error handling enhancements for AI Gateway failures">
+        callAI() function routes AI requests through AI Gateway with automatic failover. Error handling here may need enhancement for better error translation.
+      </file>
+      <file path="migrations/0001_create_test_runs.sql" kind="migration" symbol="test_runs" lines="1-19" reason="D1 schema - need to add error_message field if not exists">
+        test_runs table schema. Need to create migration to add error_message TEXT field if it doesn't exist.
+      </file>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="stagehand" version="latest">Browser automation library for Stagehand Computer Use mode</package>
+        <package name="@cloudflare/workers-types" version="^4.0.0">TypeScript types for Workers APIs</package>
+        <package name="@cloudflare/ai" version="^1.0.0">AI Gateway SDK</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-003: Workflow Auto-Retry with TestAgent Error Awareness - Workflow handles retry logic, TestAgent reports failures clearly</constraint>
+    <constraint>Error Handling Strategy: Two-tier approach - Workflow handles retries and timeouts, TestAgent translates errors and provides graceful degradation</constraint>
+    <constraint>Graceful Degradation: Always provide some feedback, even if test partially fails - Phase 4 runs with partial evidence when earlier phases fail</constraint>
+    <constraint>User-Friendly Messages: All errors translated to actionable messages that guide users toward resolution</constraint>
+    <constraint>Error Message Patterns: Consistent error message format across all phases, stored in constants for maintainability</constraint>
+    <constraint>Sanitization Requirements: Never expose stack traces, internal error codes, infrastructure details, or file paths to users</constraint>
+    <constraint>Technical Details Preservation: Full error details logged to D1 test_events for debugging, but hidden from users</constraint>
+    <constraint>Retry Delegation: TestAgent reports failure details, Workflow decides retry (not TestAgent's responsibility)</constraint>
+    <constraint>Follow existing error handling patterns from Story 2.1 (handleError() helper method)</constraint>
+    <constraint>Reuse existing helpers: updateStatus(), insertTestEvent() from shared helpers</constraint>
+    <constraint>Error constants in src/shared/constants.ts for maintainability</constraint>
+    <constraint>Error translation logic centralized in TestAgent class</constraint>
+    <constraint>Graceful degradation logic shared between Workflow and TestAgent</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="TestAgent.fetch()" kind="RPC endpoint" signature="async fetch(request: Request): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts">
+      HTTP fetch handler for RPC communication. Routes to phase endpoints (/phase1, /phase2, /phase3, /phase4) and WebSocket (/ws).
+    </interface>
+    <interface name="TestAgent.handleError()" kind="method" signature="private handleError(error: unknown, phase: string): Response" path="src/agents/TestAgent.ts">
+      Existing error handling wrapper that returns user-friendly error messages. Needs enhancement with translateError() and sanitizeErrorMessage().
+    </interface>
+    <interface name="TestAgent.updateStatus()" kind="method" signature="private async updateStatus(phase: string, message: string): Promise&lt;void&gt;" path="src/agents/TestAgent.ts">
+      Helper method for logging to D1 test_events and broadcasting via WebSocket. Used for error message broadcasting.
+    </interface>
+    <interface name="GameTestPipeline.executePhase()" kind="method" signature="private async executePhase(testRunId: string, phase: Phase, phaseName: string, isPartialEvidence?: boolean): Promise&lt;PhaseResult&gt;" path="src/workflows/GameTestPipeline.ts">
+      Workflow method for executing test phases. Returns PhaseResult indicating success or failure. Needs enhancement to track phase failures and coordinate Phase 4 execution with partial evidence.
+    </interface>
+    <interface name="insertTestEvent()" kind="function" signature="async function insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string, metadata?: string): Promise&lt;DbResult&lt;void&gt;&gt;" path="src/shared/helpers/d1.ts">
+      Helper function for logging events to D1 test_events table. Used for error logging with technical details in metadata field.
+    </interface>
+    <interface name="updateTestStatus()" kind="function" signature="async function updateTestStatus(db: D1Database, id: string, status: string): Promise&lt;DbResult&lt;void&gt;&gt;" path="src/shared/helpers/d1.ts">
+      Helper function for updating test_runs.status. May need to extend to also update error_message field.
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Error handling tests should verify error translation, sanitization, and graceful degradation. Integration tests should cover error handling across all phases with various failure scenarios. Graceful degradation tests should verify Phase 4 execution with partial evidence from failed phases. Error message tests should verify user-friendly messages, no stack traces, and technical details preserved in logs. Workflow integration tests should verify Workflow retry logic and error coordination with TestAgent. Manual testing via Wrangler dev mode is acceptable for MVP (unit tests optional).
+    </standards>
+    <locations>
+      <location>tests/</location>
+      <location>src/agents/TestAgent.ts (manual testing)</location>
+      <location>src/workflows/GameTestPipeline.ts (manual testing)</location>
+    </locations>
+    <ideas>
+      <test ac="2">Test error translation: Test each error pattern mapping (404, timeout, AI Gateway, network, browser). Verify user-friendly messages returned. Verify technical details logged but not exposed.</test>
+      <test ac="3,4,5">Test graceful degradation: Test Phase 1 failure → Phase 4 with no evidence. Test Phase 2 failure → Phase 4 with Phase 1 evidence only. Test Phase 3 failure → Phase 4 with Phase 1-2 evidence. Test Phase 4 failure → Partial results stored.</test>
+      <test ac="6">Test error message storage: Verify errors stored in test_runs.error_message. Verify errors broadcast via WebSocket. Verify errors logged to test_events.</test>
+      <test ac="8">Test error sanitization: Test with stack traces (verify removed). Test with internal codes (verify removed). Test with infrastructure details (verify removed). Test with file paths (verify removed).</test>
+      <test ac="1">Test error handling in all phases: Verify all phase methods wrapped in try-catch. Verify consistent error response format. Verify phase context included in errors.</test>
+      <test ac="7">Test retry delegation: Verify TestAgent reports failures clearly. Verify Workflow handles retry. Verify TestAgent receives error context on retry. Verify Workflow handles retry exhaustion.</test>
+    </ideas>
+  </tests>
+</story-context>
+

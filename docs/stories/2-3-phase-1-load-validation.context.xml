@@ -1,0 +1,136 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.3</storyId>
+    <title>Phase 1 - Load & Validation</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-3-phase-1-load-validation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>TestAgent</asA>
+    <iWant>to navigate to the game URL and validate it loaded successfully</iWant>
+    <soThat>I can determine if the game is accessible before testing.</soThat>
+    <tasks>
+      <task id="1">Implement runPhase1() Method Structure (AC: 1)</task>
+      <task id="2">Launch Browser Session (AC: 2)</task>
+      <task id="3">Navigate to Game URL (AC: 3)</task>
+      <task id="4">Wait for Page Load Complete (AC: 4)</task>
+      <task id="5">Capture Initial Screenshot (AC: 5)</task>
+      <task id="6">Validate Page Did Not Return 404 Error (AC: 6)</task>
+      <task id="7">Validate Page Is Not Blank (AC: 7)</task>
+      <task id="8">Detect If Game Requires User Interaction to Start (AC: 8)</task>
+      <task id="9">Log Immediate Console Errors (AC: 9)</task>
+      <task id="10">Update test_runs.status = 'running' in D1 (AC: 10)</task>
+      <task id="11">Broadcast Progress via WebSocket (AC: 11)</task>
+      <task id="12">Return Phase1Result Structure (AC: 12)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">runPhase1() method implemented: Method exists in TestAgent class and executes Phase 1 logic</ac>
+    <ac id="2">Launch browser using Stagehand: Browser session launched using launchBrowser() helper method from Story 2.2</ac>
+    <ac id="3">Navigate to game URL: Navigate to game URL provided in constructor using Stagehand page.goto()</ac>
+    <ac id="4">Wait for page load complete: Wait for DOMContentLoaded event before proceeding</ac>
+    <ac id="5">Capture initial screenshot: Screenshot saved to R2 with pattern {timestamp}-phase1-initial-load.png using captureScreenshot() helper</ac>
+    <ac id="6">Validate: page did not return 404 error: Check response status code, detect 404 errors</ac>
+    <ac id="7">Validate: page is not blank: Check if page has visible DOM elements (body has child elements)</ac>
+    <ac id="8">Detect if game requires user interaction to start: Search for buttons with text containing "play", "start", "begin" (case-insensitive)</ac>
+    <ac id="9">Log any immediate console errors: Capture console errors during page load, log to test_events table in D1</ac>
+    <ac id="10">Update test_runs.status = 'running' in D1: Update test_runs table status column to 'running' after successful Phase 1</ac>
+    <ac id="11">Broadcast progress via WebSocket: Send progress message "Phase 1 complete - Game loaded successfully" via WebSocket to connected dashboard clients</ac>
+    <ac id="12">Return Phase1Result: Return { success: true, requiresInteraction: boolean, errors: string[] } structure</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-2-ai-test-agent-browser-automation.md" title="Epic 2: AI Test Agent & Browser Automation" section="Story 2.3">
+        Story 2.3 defines Phase 1 requirements: navigate to game URL, validate load (no 404, not blank), detect interaction requirements, capture initial screenshot, log console errors, update test status, broadcast progress. Timeout: 30 seconds total.
+      </doc>
+      <doc path="docs/epic-2-tech-context.md" title="Epic 2 Technical Specification" section="Services and Modules, Acceptance Criteria, Workflows and Sequencing">
+        Technical specification details Phase 1 implementation: launchBrowser() from Story 2.2, Stagehand page.goto() navigation with DOMContentLoaded wait, validation checks (404, blank page), interaction detection (Play/Start buttons), screenshot capture, status update, WebSocket broadcast. Phase 1 result stored in DO state for subsequent phases.
+      </doc>
+      <doc path="docs/architecture/novel-pattern-designs.md" title="Novel Pattern Designs" section="Pattern 1">
+        Pattern 1 describes TestAgent as Durable Object with browser session persistence. Browser session stored in DO state, reused across phases 1-3. Phase 1 launches browser, navigates to URL, captures evidence, validates load. Evidence accumulates in DO state throughout test execution.
+      </doc>
+      <doc path="docs/architecture/technology-stack-details.md" title="Technology Stack Details" section="Browser Automation">
+        Browser Rendering service provides serverless browser sessions. Stagehand page.goto() for navigation with waitUntil option. Console log and network request capture enabled. Viewport 1280x720, headless mode. Phase 1 uses Stagehand for navigation and validation.
+      </doc>
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="FR-2.1 Phase 1: Load & Validation">
+        Phase 1 functional requirements: Navigate to game URL, wait for page load complete, capture initial screenshot, validate game loaded successfully (not 404, not blank page), detect if game requires user interaction to start, log any immediate errors. Timeout: 30 seconds.
+      </doc>
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.2 Architecture Pattern, 6.5 Stagehand Integration">
+        TestAgent Durable Object lifecycle: Workflow creates TestAgent DO, Phase 1 launches browser session, navigates to game URL, validates load, captures evidence. Stagehand integration for navigation and validation. Browser session persists in DO state for reuse in subsequent phases.
+      </doc>
+      <doc path="docs/prd/11b-references-resources.md" title="References & Resources" section="Cloudflare Documentation, Stagehand Resources">
+        Cloudflare Agents SDK documentation: https://developers.cloudflare.com/agents/. Stagehand Integration Guide: https://developers.cloudflare.com/browser-rendering/platform/stagehand/. Stagehand Page API: https://docs.stagehand.dev/v3/api-reference/page. Browser Rendering: https://developers.cloudflare.com/browser-rendering/.
+      </doc>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-002, ADR-003">
+        ADR-002: Single TestAgent Durable Object per test run (DO ID = test UUID). ADR-003: Workflow Auto-Retry with TestAgent Error Awareness - Phase 1 failures trigger workflow retry. Browser session persists in DO state, survives workflow retries.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/agents/TestAgent.ts" kind="durable-object" symbol="TestAgent" lines="1-396" reason="TestAgent class exists with DO foundation. runPhase1() method currently has empty implementation (returns 'Phase 1 not yet implemented'). Need to implement full Phase 1 logic: call launchBrowser() from Story 2.2, navigate to gameUrl, validate load, capture screenshot, detect interaction requirements, log console errors, update status, broadcast progress, return Phase1Result." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="updateTestStatus" lines="107-132" reason="updateTestStatus() function available for updating test_runs.status. Takes D1Database, test run ID, and new status. Updates status, updated_at, and completed_at timestamp. Use to set status='running' after successful Phase 1." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="insertTestEvent" lines="144-183" reason="insertTestEvent() function available for logging events to test_events table. Takes D1Database, testRunId, phase, eventType, description, optional metadata. Use to log console errors and phase progress during Phase 1." />
+      <artifact path="src/shared/types.ts" kind="type-definition" symbol="PhaseResult" lines="176-183" reason="PhaseResult interface needs extension: add Phase1Result interface with { success: boolean, requiresInteraction: boolean, errors: string[] }. Update TestAgentState to store phase1 result in phaseResults.phase1." />
+      <artifact path="src/shared/types.ts" kind="type-definition" symbol="TestAgentState" lines="188-199" reason="TestAgentState interface needs updates: ensure gameUrl property accessible, add phase1 result storage in phaseResults.phase1. Browser session should be stored via Story 2.2 launchBrowser() helper." />
+      <artifact path="src/agents/TestAgent.ts" kind="method" symbol="updateStatus" lines="235-263" reason="updateStatus() helper method available from Story 2.1. Logs to D1 test_events and broadcasts via WebSocket. Rate limited to 1 event per 5 seconds. Use to broadcast Phase 1 progress: 'Phase 1 complete - Game loaded successfully'." />
+      <artifact path="src/shared/helpers/r2.ts" kind="helper" symbol="uploadScreenshot" lines="138-162" reason="uploadScreenshot() function available from Epic 1. Takes r2 bucket, testId, phase, action, and buffer. Returns DbResult with R2 object key. Used by captureScreenshot() helper from Story 2.2. Screenshot pattern: {timestamp}-phase1-initial-load.png." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="stagehand" version="latest">Browser automation library with page.goto() for navigation, observe() for control discovery. Stagehand page API for DOMContentLoaded wait and element detection.</package>
+        <package name="@cloudflare/workers-types" version="^4.0.0">TypeScript types for Workers APIs, Durable Objects, Browser Rendering service, D1 database</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Phase 1 execution must complete within 30 seconds total timeout</constraint>
+    <constraint>Browser session persists in DO state across phases 1-3 (reuse existing session from Story 2.2 if available)</constraint>
+    <constraint>Page load wait: Use DOMContentLoaded event via Stagehand page.goto() waitUntil option or page.waitForLoadState()</constraint>
+    <constraint>404 error validation: Check response.status() from page.goto(), return user-friendly error if status === 404</constraint>
+    <constraint>Blank page detection: Check if body has child elements using page.locator('body').locator('> *').count() or body.innerText()</constraint>
+    <constraint>Interaction detection: Search for buttons with text containing "play", "start", "begin" (case-insensitive) using page.locator('button:has-text(...)')</constraint>
+    <constraint>Console errors captured by Story 2.2 listeners - extract from DO state consoleLogs array, filter for level === 'error'</constraint>
+    <constraint>Screenshot capture uses captureScreenshot() helper from Story 2.2 - description: 'phase1-initial-load'</constraint>
+    <constraint>Status update uses updateTestStatus() helper from src/shared/helpers/d1.ts - set status='running' after successful Phase 1</constraint>
+    <constraint>WebSocket broadcast uses updateStatus() helper from Story 2.1 - rate limited to 1 event per 5 seconds</constraint>
+    <constraint>Error handling: User-friendly error messages, no stack traces exposed. Errors logged to test_events for debugging.</constraint>
+    <constraint>RPC-only architecture: No exposed HTTP APIs, all communication via service bindings</constraint>
+    <constraint>Phase 1 result stored in DO state phaseResults.phase1 for reference in subsequent phases</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="launchBrowser" kind="helper-method" signature="launchBrowser(): Promise&lt;Stagehand&gt;" path="src/agents/TestAgent.ts">Browser session launch helper from Story 2.2. Returns Stagehand instance. Reuses existing browser session from DO state if available. Creates new session if needed. Browser session persists in DO state for reuse across phases.</interface>
+    <interface name="captureScreenshot" kind="helper-method" signature="captureScreenshot(description: string): Promise&lt;string&gt;" path="src/agents/TestAgent.ts">Screenshot capture helper from Story 2.2. Takes description string, saves screenshot to R2 using uploadScreenshot() helper. Returns R2 object key or public URL. Screenshot pattern: {timestamp}-{description}.png.</interface>
+    <interface name="updateStatus" kind="helper-method" signature="updateStatus(phase: string, message: string): Promise&lt;void&gt;" path="src/agents/TestAgent.ts">Status update helper from Story 2.1. Logs to D1 test_events table and broadcasts via WebSocket. Rate limited to 1 event per 5 seconds. Use for Phase 1 progress broadcast: 'Phase 1 complete - Game loaded successfully'.</interface>
+    <interface name="updateTestStatus" kind="helper-function" signature="updateTestStatus(db: D1Database, id: string, status: string): Promise&lt;DbResult&lt;void&gt;&gt;" path="src/shared/helpers/d1.ts">D1 status update helper from Epic 1. Updates test_runs.status, updated_at, and completed_at. Use to set status='running' after successful Phase 1 completion.</interface>
+    <interface name="insertTestEvent" kind="helper-function" signature="insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string, metadata?: string): Promise&lt;DbResult&lt;void&gt;&gt;" path="src/shared/helpers/d1.ts">D1 event logging helper from Epic 1. Inserts event to test_events table. Use to log console errors during Phase 1: eventType='console_error', description=error message.</interface>
+    <interface name="Stagehand.page.goto" kind="library-method" signature="page.goto(url: string, options?: { waitUntil?: 'domcontentloaded' | 'load' | 'networkidle' }): Promise&lt;Response&gt;" path="node_modules/stagehand">Stagehand page navigation method. Navigate to game URL with waitUntil: 'domcontentloaded' option. Returns Response object with status code for 404 validation.</interface>
+    <interface name="Phase1Result" kind="interface" signature="interface Phase1Result { success: boolean; requiresInteraction: boolean; errors: string[]; }" path="src/shared/types.ts">Phase 1 result interface needs to be added to src/shared/types.ts. Return structure: success (boolean), requiresInteraction (boolean), errors (string array). Store in TestAgentState.phaseResults.phase1.</interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests verify Phase 1 execution with real game URL: browser navigation, screenshot capture, status update to D1, WebSocket broadcast. Validation tests: 404 error detection, blank page detection, interaction requirement detection, console error logging. Timeout tests: page load timeout (slow page), navigation timeout (invalid URL). Error handling tests: browser launch failure, navigation failure, screenshot failure, verify user-friendly error messages. Manual testing via wrangler dev local environment. Cloudflare dashboard for deployed testing.</standards>
+    <locations>tests/ directory for integration tests. Manual testing via wrangler dev local environment. Cloudflare dashboard for deployed testing.</locations>
+    <ideas>
+      <test ac="1">Call runPhase1(), verify method executes and returns Phase1Result structure.</test>
+      <test ac="2">Verify browser session created in runPhase1() using launchBrowser() helper, verify Stagehand instance returned.</test>
+      <test ac="3">Navigate to game URL, verify page.goto() called with correct URL and waitUntil: 'domcontentloaded' option.</test>
+      <test ac="4">Verify page load event detected: check page.url() matches expected URL, verify page is not in error state.</test>
+      <test ac="5">Call captureScreenshot('phase1-initial-load'), verify screenshot saved to R2 with pattern {timestamp}-phase1-initial-load.png.</test>
+      <test ac="6">Navigate to invalid URL (404), verify 404 detected, result.success = false, error message: "Game URL returned 404 error. Please check the URL is correct."</test>
+      <test ac="7">Navigate to blank page, verify blank page detection, result.success = false, error message: "Game page appears to be blank. Please check the game URL loads correctly."</test>
+      <test ac="8">Navigate to game with "Play" button, verify interaction detected, result.requiresInteraction = true. Navigate to game without interaction button, verify result.requiresInteraction = false.</test>
+      <test ac="9">Navigate to page with console.error(), verify console errors extracted from DO state consoleLogs array, logged to test_events with eventType='console_error'.</test>
+      <test ac="10">Run Phase 1 successfully, verify test_runs.status = 'running' after Phase 1, updated_at timestamp updated.</test>
+      <test ac="11">Run Phase 1, verify progress message broadcast via WebSocket: "Phase 1 complete - Game loaded successfully". Verify message sent via updateStatus() helper.</test>
+      <test ac="12">Verify Phase1Result returned: { success: boolean, requiresInteraction: boolean, errors: string[] }. Verify result stored in DO state phaseResults.phase1.</test>
+    </ideas>
+  </tests>
+</story-context>
+

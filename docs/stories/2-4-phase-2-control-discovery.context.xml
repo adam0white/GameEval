@@ -1,0 +1,111 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.4</storyId>
+    <title>Phase 2 - Control Discovery</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-4-phase-2-control-discovery.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>TestAgent</asA>
+    <iWant>to discover interactive controls using Stagehand observe()</iWant>
+    <soThat>I understand how to interact with the game</soThat>
+    <tasks>
+      <task id="1" ac="1">Implement runPhase2() Method Structure - Create method with try-catch, 45s timeout, initialize result structure</task>
+      <task id="2" ac="2">Use Stagehand observe() to Identify Interactive Elements - Call observe(), verify Stagehand instance, parse results</task>
+      <task id="3" ac="3">Classify Discovered Elements - Classify as buttons, keyboard inputs, clickable divs, input fields, build ControlMap</task>
+      <task id="4" ac="4">Use inputSchema to Prioritize Controls - If provided, prioritize matching controls, validate against schema</task>
+      <task id="5" ac="5">Capture Screenshot with Controls Highlighted - Use captureScreenshot('phase2-controls') helper</task>
+      <task id="6" ac="6">Generate Control Hypothesis - Analyze controls, generate text hypothesis describing discovered controls</task>
+      <task id="7" ac="7">Store Control Hypothesis in Agent SQL Database - Create control_discoveries table, insert discovered controls</task>
+      <task id="8" ac="8">Log Discovered Controls to test_events - Use insertTestEvent() or direct D1 query for each control</task>
+      <task id="9" ac="9">Broadcast Progress via WebSocket - Use updateStatus() helper with control count message</task>
+      <task id="10" ac="10">Return Phase2Result Structure - Set success, return { success, controls, hypothesis }, update DO state</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">runPhase2() method implemented: Method exists in TestAgent class and executes Phase 2 logic</ac>
+    <ac id="2">Use Stagehand observe() to identify DOM-based interactive elements: Call Stagehand observe() method to discover interactive elements on the page</ac>
+    <ac id="3">Classify discovered elements: Classify controls as buttons, keyboard inputs, clickable divs, input fields, or other interactive types</ac>
+    <ac id="4">If inputSchema provided, use it to prioritize specific controls: If inputSchema provided in constructor, use it to prioritize or validate discovered controls</ac>
+    <ac id="5">Capture screenshot of page with controls highlighted: Screenshot saved to R2 with pattern {timestamp}-phase2-controls.png using captureScreenshot() helper</ac>
+    <ac id="6">Generate control hypothesis: Generate a text hypothesis describing discovered controls (e.g., "Game has WASD movement controls and Space to shoot")</ac>
+    <ac id="7">Store control hypothesis in DO SQL database: Store discovered controls in Agent SQL control_discoveries table for reference in Phase 3</ac>
+    <ac id="8">Log discovered controls to test_events: Log each discovered control with description to D1 test_events table</ac>
+    <ac id="9">Broadcast progress via WebSocket: Send progress message "Phase 2 complete - Discovered N controls" via WebSocket to connected dashboard clients</ac>
+    <ac id="10">Return Phase2Result: Return { success: true, controls: ControlMap, hypothesis: string } structure</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-2-ai-test-agent-browser-automation.md" title="Epic 2: AI Test Agent &amp; Browser Automation" section="Story 2.4" snippet="Phase 2 discovers interactive controls using Stagehand observe(), classifies controls, generates hypothesis, and stores in Agent SQL for Phase 3 reference." />
+      <doc path="docs/epic-2-tech-context.md" title="Epic Technical Specification: AI Test Agent &amp; Browser Automation" section="Data Models and Contracts" snippet="Phase2Result interface: { success: boolean; controls: ControlMap; hypothesis: string }. ControlMap: { [selector]: { type: 'click' | 'keyboard' | 'drag' | 'hover', description: string } }" />
+      <doc path="docs/epic-2-tech-context.md" title="Epic Technical Specification: AI Test Agent &amp; Browser Automation" section="Stagehand Integration" snippet="Phase 2: Control discovery using stagehand.observe() returns interactive element locators. Control types: click, keyboard, drag, hover." />
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="FR-2.2 Phase 2: Control Discovery" snippet="Use Stagehand observe() to identify DOM-based interactive elements. If input schema provided, use it to guide control discovery. Capture screenshot of detected controls, classify control types, generate hypothesis." />
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.5 Stagehand Integration" snippet="Phase 2: Stagehand observe() identifies interactive elements. Target games use DOM for UI (not canvas), making element detection more reliable." />
+      <doc path="docs/architecture/novel-pattern-designs.md" title="Novel Pattern Designs" section="Pattern 1: TestAgent as Durable Object" snippet="TestAgent.runPhase2() - Control Discovery: Stagehand observe() identifies elements, controls stored in Agent SQL, screenshot saved to R2." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-002: Single TestAgent Durable Object Per Test" snippet="Each test run managed by one TestAgent DO instance (DO ID = test UUID), persisting across all 4 phases. Browser session persists across phases 1-3." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-007: Agent SQL for Ephemeral Per-Test Data" snippet="Agent SQL database stores per-test ephemeral data (agent_actions, control_discoveries, decision_log). D1 for persistent cross-test metadata." />
+      <doc path="docs/architecture/technology-stack-details.md" title="Technology Stack Details" section="Browser Automation" snippet="Stagehand: AI-powered browser control library. observe(): DOM element discovery. Computer Use mode for autonomous gameplay." />
+    </docs>
+    <code>
+      <file path="src/agents/TestAgent.ts" kind="controller" symbol="TestAgent" lines="184-198" reason="TestAgent class with runPhase2() method stub to be implemented. Contains initializeSQL() method that creates control_discoveries table. Has updateStatus() helper for WebSocket broadcasting." />
+      <file path="src/agents/TestAgent.ts" kind="controller" symbol="initializeSQL" lines="124-166" reason="Creates control_discoveries table in Agent SQL: CREATE TABLE IF NOT EXISTS control_discoveries (id, element_selector, action_type, confidence, discovered_at). Already implements table creation for Phase 2." />
+      <file path="src/agents/TestAgent.ts" kind="controller" symbol="updateStatus" lines="235-263" reason="Helper method logs to D1 test_events and broadcasts via WebSocket. Rate limited to 1 event per 5 seconds. Used for Phase 2 progress broadcasting (AC 9)." />
+      <file path="src/shared/types.ts" kind="types" symbol="TestAgentState" lines="188-199" reason="TestAgent state interface with phaseResults and evidence storage. Need to add Phase2Result type and ControlMap type for Phase 2 implementation." />
+      <file path="src/shared/types.ts" kind="types" symbol="PhaseResult" lines="176-183" reason="Generic phase result interface. Need to create specific Phase2Result interface: { success: boolean; controls: ControlMap; hypothesis: string }." />
+      <file path="src/shared/helpers/d1.ts" kind="service" symbol="insertTestEvent" lines="144-183" reason="D1 helper function for logging test events. Used to log discovered controls to test_events table (AC 8). Accepts testRunId, phase, eventType, description, optional metadata." />
+      <file path="src/shared/constants.ts" kind="constants" symbol="Phase" lines="53-58" reason="Phase enum with PHASE2 constant. Used for phase identification in logging and status updates." />
+      <file path="src/shared/constants.ts" kind="constants" symbol="EventType" lines="61-71" reason="EventType enum includes CONTROL_DISCOVERED constant. Used when logging control discoveries to test_events." />
+    </code>
+    <dependencies>
+      <node>
+        <package name="stagehand" version="latest">Browser automation library with observe() method for control discovery. Computer Use mode for autonomous gameplay.</package>
+        <package name="wrangler" version="latest">Cloudflare Workers CLI for development and deployment</package>
+        <package name="typescript" version="latest">TypeScript compiler for type safety</package>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-002: Single TestAgent Durable Object per test run (DO ID = test UUID). TestAgent persists across all 4 phases.</constraint>
+    <constraint>ADR-003: Workflow Auto-Retry with TestAgent Error Awareness. Phase 2 failures trigger workflow retry with adaptive strategies.</constraint>
+    <constraint>Pattern 1: Browser session persists in DO state across phases 1-3. Reuse existing Stagehand instance from Phase 1 (no need to launch new browser).</constraint>
+    <constraint>Timeout: Phase 2 execution must complete within 45 seconds total.</constraint>
+    <constraint>RPC-only architecture: No exposed HTTP APIs, all communication via service bindings.</constraint>
+    <constraint>Agent SQL storage: Use built-in Agent SQL database for per-test control discoveries (ephemeral data). control_discoveries table already created in initializeSQL().</constraint>
+    <constraint>TypeScript strict mode: Already configured. All types must be properly defined.</constraint>
+    <constraint>Error handling: All errors must be translated to user-friendly messages. Never expose stack traces or internal error codes.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="TestAgent.runPhase2()" kind="method" signature="private async runPhase2(): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts" />
+    <interface name="Stagehand.observe()" kind="method" signature="await stagehand.observe(): Promise&lt;InteractiveElement[]&gt;" path="External: stagehand library" />
+    <interface name="insertTestEvent" kind="function" signature="insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string, metadata?: string): Promise&lt;DbResult&lt;void&gt;&gt;" path="src/shared/helpers/d1.ts" />
+    <interface name="updateStatus" kind="method" signature="private async updateStatus(phase: string, message: string): Promise&lt;void&gt;" path="src/agents/TestAgent.ts" />
+    <interface name="Phase2Result" kind="type" signature="interface Phase2Result { success: boolean; controls: ControlMap; hypothesis: string; }" path="src/shared/types.ts (to be added)" />
+    <interface name="ControlMap" kind="type" signature="type ControlMap = { [selector: string]: { type: 'click' | 'keyboard' | 'drag' | 'hover'; description: string; } };" path="src/shared/types.ts (to be added)" />
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests: Test Phase 2 execution with real game URL. Verify Stagehand observe() discovers controls, controls classified correctly, screenshot capture works, status update to D1, WebSocket broadcast. Control discovery tests: Test DOM-based game (buttons, inputs), keyboard-only game, game with inputSchema provided, game with no interactive elements (graceful handling). Hypothesis generation tests: Test WASD movement detection, Space key detection, button-based control detection. Timeout tests: Test observe() timeout (slow page), classification timeout (many controls). Error handling tests: Test browser session not available, observe() failure, screenshot failure, verify user-friendly error messages.</standards>
+    <locations>Manual testing via Wrangler dev mode. Integration tests in Cloudflare dashboard + wrangler dev local environment. Test files location: tests/ directory (if exists).</locations>
+    <ideas>
+      <test ac="1">Verify runPhase2() method exists and executes without errors</test>
+      <test ac="2">Navigate to game page, call stagehand.observe(), verify interactive elements returned</test>
+      <test ac="3">Verify controls classified correctly (buttons, keyboard inputs, clickable divs, input fields)</test>
+      <test ac="4">Provide inputSchema with movement controls, verify controls prioritized matching schema</test>
+      <test ac="5">Call captureScreenshot('phase2-controls'), verify screenshot saved to R2 with correct path pattern</test>
+      <test ac="6">Verify hypothesis text generated describing discovered controls (e.g., "Game has WASD movement controls")</test>
+      <test ac="7">Verify controls stored in Agent SQL control_discoveries table with correct schema</test>
+      <test ac="8">Verify each discovered control logged to D1 test_events with event_type='control_discovered'</test>
+      <test ac="9">Verify WebSocket broadcast sent with message "Phase 2 complete - Discovered N controls"</test>
+      <test ac="10">Verify Phase2Result returned with correct structure: { success, controls, hypothesis }</test>
+    </ideas>
+  </tests>
+</story-context>
+

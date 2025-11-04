@@ -1,0 +1,117 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.2</storyId>
+    <title>Browser Rendering Integration and Stagehand Setup</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-2-browser-rendering-integration-and-stagehand-setup.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>Stagehand integrated with Cloudflare Browser Rendering</iWant>
+    <soThat>the TestAgent can control a browser session.</soThat>
+    <tasks>
+      <task id="1">Configure Browser Rendering Service Binding (AC: 1)</task>
+      <task id="2">Install and Initialize Stagehand Library (AC: 2)</task>
+      <task id="3">Implement launchBrowser() Helper Method (AC: 3, 6)</task>
+      <task id="4">Implement Browser Session Persistence (AC: 4)</task>
+      <task id="5">Implement closeBrowser() Helper Method (AC: 5)</task>
+      <task id="6">Enable Console Log Capture (AC: 7)</task>
+      <task id="7">Enable Network Request Monitoring (AC: 8)</task>
+      <task id="8">Implement captureScreenshot() Method (AC: 9)</task>
+      <task id="9">Update TypeScript Types and Interfaces</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Browser Rendering service binding configured: TestAgent DO has access to env.BROWSER binding for Browser Rendering service</ac>
+    <ac id="2">Stagehand library initialized: Stagehand instance created with Browser Rendering connection and configured for Computer Use mode</ac>
+    <ac id="3">Helper method launchBrowser(): Creates browser session, configures viewport and user agent, returns Stagehand instance</ac>
+    <ac id="4">Browser session persists in DO state: Browser session handle stored in DO state and reused across phases 1-3</ac>
+    <ac id="5">Helper method closeBrowser(): Cleanly terminates browser session, releases resources</ac>
+    <ac id="6">Browser configuration: Headless mode enabled, viewport 1280x720, user agent string set to 'GameEval TestAgent/1.0'</ac>
+    <ac id="7">Console log capture enabled: Console logs from browser session streamed to DO state, accumulated in memory</ac>
+    <ac id="8">Network request monitoring enabled: Failed network requests (status >= 400 or connection failures) tracked in DO state</ac>
+    <ac id="9">Screenshot capture function: captureScreenshot(description: string) method saves screenshots to R2 using existing helper functions</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-2-ai-test-agent-browser-automation.md" title="Epic 2: AI Test Agent & Browser Automation" section="Story 2.2">
+        Story 2.2 defines browser integration requirements: Browser Rendering service binding, Stagehand initialization, browser session management, console log capture, network monitoring, and screenshot capture. Browser session persists across phases 1-3 for efficiency.
+      </doc>
+      <doc path="docs/epic-2-tech-context.md" title="Epic 2 Technical Specification" section="Services and Modules, Acceptance Criteria">
+        Technical specification details Browser Rendering integration pattern, Stagehand Computer Use mode configuration, browser session persistence in DO state, and evidence capture requirements. Includes data models for browser session handles, console logs, and network errors.
+      </doc>
+      <doc path="docs/architecture/novel-pattern-designs.md" title="Novel Pattern Designs" section="Pattern 1">
+        Pattern 1 describes TestAgent as Durable Object with browser session persistence. Browser session stored in DO state, reused across phases 1-3 to maintain game state and reduce overhead. Evidence accumulates naturally throughout test execution.
+      </doc>
+      <doc path="docs/architecture/technology-stack-details.md" title="Technology Stack Details" section="Browser Automation">
+        Browser Rendering service provides serverless browser sessions. Viewport 1280x720, console log and network request capture enabled. Stagehand library provides Computer Use mode for autonomous gameplay and observe() for control discovery.
+      </doc>
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.5 Stagehand Integration">
+        Stagehand integration pattern: Browser Rendering service binding launches browser, Stagehand initialized with Computer Use mode. Evidence capture pattern: screenshots stored incrementally to R2, console logs captured continuously, network errors tracked.
+      </doc>
+      <doc path="docs/prd/11b-references-resources.md" title="References & Resources" section="Cloudflare Documentation, Stagehand Resources">
+        Cloudflare Browser Rendering documentation: https://developers.cloudflare.com/browser-rendering/. Stagehand Integration Guide: https://developers.cloudflare.com/browser-rendering/platform/stagehand/. Stagehand Computer Use Guide: https://docs.stagehand.dev/v3/best-practices/computer-use.
+      </doc>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-002">
+        ADR-002: Single TestAgent Durable Object per test run (DO ID = test UUID). Browser session persists in DO state, survives workflow retries. State management uses built-in Agent SQL database for per-test reasoning.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/agents/TestAgent.ts" kind="durable-object" symbol="TestAgent" lines="1-396" reason="TestAgent class exists with DO foundation. Need to add browser session management methods (launchBrowser, closeBrowser, captureScreenshot), console log listeners, network error tracking, and browser session persistence logic." />
+      <artifact path="src/shared/helpers/r2.ts" kind="helper" symbol="uploadScreenshot" lines="138-162" reason="uploadScreenshot() function available for screenshot storage. Takes r2 bucket, testId, phase, action, and buffer. Returns DbResult with R2 object key. Use in captureScreenshot() method." />
+      <artifact path="src/shared/helpers/r2.ts" kind="helper" symbol="uploadLog" lines="191-228" reason="uploadLog() function available for log file storage with append functionality. Uses fetch-modify-put pattern. Set up for console log and network error log flushing in Phase 4." />
+      <artifact path="src/shared/types.ts" kind="type-definition" symbol="TestAgentState" lines="1-50" reason="TestAgentState interface needs updates: add browserSession property, consoleLogs array, networkErrors array. Add ConsoleLogEntry and NetworkError interfaces." />
+      <artifact path="wrangler.toml" kind="configuration" symbol="browser" lines="30-32" reason="Browser Rendering binding configured: [browser] binding = 'BROWSER'. Verify binding accessible in TestAgent via env.BROWSER." />
+      <artifact path="worker-configuration.d.ts" kind="type-definition" symbol="Env" lines="1-100" reason="Worker environment types need BROWSER binding type: BROWSER: BrowserRenderingService. Add BrowserRenderingService type definition if not present." />
+      <artifact path="package.json" kind="manifest" symbol="dependencies" lines="12-14" reason="Stagehand package already installed: 'stagehand': 'latest'. Import Stagehand in TestAgent.ts: import { Stagehand } from 'stagehand'." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="stagehand" version="latest">Browser automation library with Computer Use mode and observe() for control discovery</package>
+        <package name="@cloudflare/workers-types" version="^4.0.0">TypeScript types for Workers APIs and Browser Rendering service</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Browser session must persist in DO state across phases 1-3 to maintain game state and reduce overhead</constraint>
+    <constraint>Browser session handle stored in DO state, survives workflow retries (Pattern 1 from novel-pattern-designs.md)</constraint>
+    <constraint>Console logs accumulated in memory during phases 1-3, flushed to R2 at end of Phase 3 (Story 2.5)</constraint>
+    <constraint>Network errors tracked in DO state, included in Phase 4 evaluation (Story 2.6)</constraint>
+    <constraint>Browser configuration: headless mode, viewport 1280x720, user agent 'GameEval TestAgent/1.0'</constraint>
+    <constraint>Stagehand initialized with Computer Use mode: mode: 'computer-use', model: 'gpt-4o' or via AI Gateway (reference Story 2.5)</constraint>
+    <constraint>R2 screenshot upload uses existing uploadScreenshot() helper from src/shared/helpers/r2.ts</constraint>
+    <constraint>Error handling: user-friendly error messages, no stack traces exposed</constraint>
+    <constraint>RPC-only architecture: No exposed HTTP APIs, all communication via service bindings</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="BrowserRenderingService" kind="service-binding" signature="env.BROWSER.launch(options: BrowserLaunchOptions): Promise&lt;Browser&gt;" path="worker-configuration.d.ts">Browser Rendering service binding for launching browser sessions. Configured in wrangler.toml as BROWSER binding.</interface>
+    <interface name="Stagehand" kind="library-class" signature="new Stagehand(page: Page, options: { mode: 'computer-use', model: string }): Stagehand" path="node_modules/stagehand">Stagehand library class for browser automation. Initialize with browser page and Computer Use mode configuration.</interface>
+    <interface name="uploadScreenshot" kind="helper-function" signature="uploadScreenshot(r2: R2Bucket, testId: string, phase: Phase, action: string, buffer: ArrayBuffer): Promise&lt;DbResult&lt;string&gt;&gt;" path="src/shared/helpers/r2.ts">R2 screenshot upload helper. Returns R2 object key on success. Use in captureScreenshot() method.</interface>
+    <interface name="TestAgentState" kind="interface" signature="interface TestAgentState { browserSession?: BrowserSessionHandle; consoleLogs: ConsoleLogEntry[]; networkErrors: NetworkError[]; ... }" path="src/shared/types.ts">TestAgent state interface needs updates: add browserSession, consoleLogs, networkErrors properties for browser session management.</interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests verify browser session launch, Stagehand initialization, console log capture, network error tracking, and screenshot capture. Use wrangler dev for local testing. Test browser session persistence by running Phase 1, then Phase 2, verify session reused. Test error handling with invalid browser launch options.</standards>
+    <locations>tests/ directory for integration tests. Manual testing via wrangler dev local environment. Cloudflare dashboard for deployed testing.</locations>
+    <ideas>
+      <test ac="1">Verify env.BROWSER accessible in TestAgent constructor. Log binding availability in TestAgent initialization.</test>
+      <test ac="2">Call launchBrowser(), verify Stagehand instance returned with Computer Use mode configured.</test>
+      <test ac="3">Call launchBrowser(), verify browser session created with viewport 1280x720, headless mode, user agent 'GameEval TestAgent/1.0'.</test>
+      <test ac="4">Run Phase 1, then Phase 2, verify browser session reused from DO state (check session handle matches).</test>
+      <test ac="5">Call closeBrowser(), verify browser session terminated, resources released, browser session cleared from DO state.</test>
+      <test ac="6">Verify browser configuration: headless=true, viewport={width: 1280, height: 720}, userAgent='GameEval TestAgent/1.0'.</test>
+      <test ac="7">Navigate to page with console.log(), console.warn(), console.error(), verify logs captured in DO state with timestamps and levels.</test>
+      <test ac="8">Navigate to page with failed request (404), verify network error tracked in DO state with URL, status code, error message.</test>
+      <test ac="9">Call captureScreenshot('test-action'), verify screenshot saved to R2 using uploadScreenshot() helper, R2 key returned or public URL generated.</test>
+    </ideas>
+  </tests>
+</story-context>
+

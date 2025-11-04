@@ -1,0 +1,279 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.6</storyId>
+    <title>Phase 4 - Evaluation & Scoring</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-6-phase-4-evaluation-scoring.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>TestAgent</asA>
+    <iWant>to analyze all captured evidence and generate quality scores</iWant>
+    <soThat>users receive actionable feedback on their game</soThat>
+    <tasks>
+      <task id="1">Implement `runPhase4()` Method Structure (AC: 1)</task>
+      <task id="2">Retrieve All Screenshots from R2 (AC: 2)</task>
+      <task id="3">Retrieve Console Logs and Network Errors from DO State (AC: 3)</task>
+      <task id="4">Use AI Gateway Vision Model for Quality Assessment (AC: 4)</task>
+      <task id="5">Generate Scores for 5 Metrics (AC: 5)</task>
+      <task id="6">Calculate Overall Quality Score (AC: 6)</task>
+      <task id="7">Generate Justifications for Each Metric (AC: 7)</task>
+      <task id="8">Store Evaluation Scores to D1 (AC: 8)</task>
+      <task id="9">Store Overall Score in test_runs Table (AC: 9)</task>
+      <task id="10">Flush All Logs to R2 (AC: 10)</task>
+      <task id="11">Update test_runs.status to 'completed' (AC: 11)</task>
+      <task id="12">Broadcast Final Results via WebSocket (AC: 12)</task>
+      <task id="13">Return Phase4Result Structure (AC: 13)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">`runPhase4()` method implemented: Method exists in TestAgent class and executes Phase 4 logic</ac>
+    <ac id="2">Retrieve all screenshots from R2 for this test: Use `getTestArtifacts()` helper to retrieve all screenshots from R2 bucket</ac>
+    <ac id="3">Retrieve console logs and network errors from DO state: Load console logs and network errors accumulated in DO state from Phases 1-3</ac>
+    <ac id="4">Use AI Gateway (vision model) to analyze screenshots for quality assessment: Call `callAI()` with vision model preference to analyze screenshots and generate quality scores</ac>
+    <ac id="5">Generate scores (0-100) for 5 metrics: Generate scores for: Game Loads Successfully, Visual Quality, Controls &amp; Responsiveness, Playability, Technical Stability</ac>
+    <ac id="6">Calculate overall quality score: Calculate weighted average: Load 15%, Visual 20%, Controls 20%, Playability 30%, Technical 15%</ac>
+    <ac id="7">Generate 2-3 sentence justification for each metric score: Each metric score must include a specific justification referencing what AI saw in screenshots or evidence</ac>
+    <ac id="8">Store evaluation_scores to D1 (6 rows: 5 metrics + overall): Insert 6 rows into `evaluation_scores` table (5 metrics + overall) with test_run_id, metric_name, score, justification, created_at</ac>
+    <ac id="9">Store overall_score in test_runs table: Update `test_runs.overall_score` with calculated overall score</ac>
+    <ac id="10">Flush all logs to R2: Upload console.log, network.log, and agent-decisions.log to R2 using `uploadLog()` helper</ac>
+    <ac id="11">Update test_runs.status = 'completed' in D1: Update test_runs table status to 'completed' and set completed_at timestamp</ac>
+    <ac id="12">Broadcast final results via WebSocket: Broadcast final results including overall score and metric scores via WebSocket to dashboard</ac>
+    <ac id="13">Return Phase4Result: Return `{ success: true, overallScore: number, metrics: MetricScore[] }` structure</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics/epic-2-ai-test-agent-browser-automation.md</path>
+        <title>Epic 2: AI Test Agent &amp; Browser Automation</title>
+        <section>Story 2.6: Phase 4 - Evaluation &amp; Scoring</section>
+        <snippet>Story 2.6 implements Phase 4 of the test execution pipeline - Evaluation &amp; Scoring. This story builds on Story 2.5's Phase 3 gameplay exploration to analyze all captured evidence (screenshots, console logs, network errors, AI decisions) and generate quality scores across 5 dimensions using AI Gateway vision models.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2-tech-context.md</path>
+        <title>Epic Technical Specification: AI Test Agent &amp; Browser Automation</title>
+        <section>Phase 4 Handler</section>
+        <snippet>Phase 4 Handler (`runPhase4()`) analyzes evidence, generates quality scores via AI Gateway. Retrieve all screenshots from R2 for this test, retrieve console logs and network errors from DO state, call AI Gateway (vision model) to analyze screenshots, generate scores (0-100) for 5 metrics + overall.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd/4-functional-requirements.md</path>
+        <title>4. Functional Requirements</title>
+        <section>FR-2.4 Phase 4: Evaluation &amp; Scoring</section>
+        <snippet>Phase 4: Evaluation &amp; Scoring (60s timeout) - Analyze all captured evidence using Workers AI vision model, review screenshots, console logs, network errors, generate structured evaluation report, calculate overall quality score (0-100), store final results to D1.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd/4-functional-requirements.md</path>
+        <title>4. Functional Requirements</title>
+        <section>FR-4.1 through FR-4.7: AI Evaluation Metrics</section>
+        <snippet>5 metrics: Game Loads Successfully (0-100), Visual Quality (0-100), Controls &amp; Responsiveness (0-100), Playability (0-100), Technical Stability (0-100). Overall Quality Score: weighted average (Load 15%, Visual 20%, Controls 20%, Playability 30%, Technical 15%). Each metric score MUST include a 2-3 sentence justification.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records (ADRs)</title>
+        <section>ADR-004: AI Gateway as Primary Entry Point for All AI Requests</section>
+        <snippet>All AI requests (TestAgent decisions, evaluation) route through Cloudflare AI Gateway, not directly to AI providers. Provides unified observability, cost tracking, automatic failover, caching (15-minute TTL), and future-proof provider swapping.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records (ADRs)</title>
+        <section>ADR-007: Agent SQL for Ephemeral Per-Test Data, D1 for Cross-Test Metadata</section>
+        <snippet>Use Agent SQL (built into Durable Objects) for per-test reasoning/decisions, and D1 for persistent cross-test metadata. Agent SQL perfect for ephemeral data (AI decisions, action history), D1 optimized for cross-test queries (historical trends, test list).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/data-architecture.md</path>
+        <title>Data Architecture</title>
+        <section>D1 Database Schema - evaluation_scores table</section>
+        <snippet>evaluation_scores table: id (PRIMARY KEY AUTOINCREMENT), test_run_id (TEXT NOT NULL), metric_name (TEXT NOT NULL - 'load' | 'visual' | 'controls' | 'playability' | 'technical' | 'overall'), score (INTEGER NOT NULL 0-100), justification (TEXT NOT NULL), created_at (INTEGER NOT NULL).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/data-architecture.md</path>
+        <title>Data Architecture</title>
+        <section>R2 Storage Structure</section>
+        <snippet>R2 storage: tests/{test-uuid}/screenshots/{timestamp}-{phase}-{action}.png, tests/{test-uuid}/logs/console.log, network.log, agent-decisions.log. Content-Type: image/png for screenshots, text/plain for logs. Public read access for dashboard viewing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ai-gateway-usage.md</path>
+        <title>AI Gateway Usage Guide</title>
+        <section>Vision Request (with Images)</section>
+        <snippet>callAI() helper supports vision requests with ArrayBuffer images. Pass images array, use 'primary' model preference for Workers AI vision model (@cf/meta/llama-3.2-11b-vision-instruct) or fallback to OpenAI GPT-4o. AI Gateway handles automatic failover and caching.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2-tech-context.md</path>
+        <title>Epic Technical Specification: AI Test Agent &amp; Browser Automation</title>
+        <section>Phase Result Types - Phase4Result</section>
+        <snippet>interface Phase4Result { success: boolean; overallScore: number; metrics: MetricScore[]; } where MetricScore is { name: string; score: number; justification: string; }. Phase 4 returns Phase4Result with overall score and array of 6 metric scores (5 metrics + overall).</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/2-5-phase-3-gameplay-exploration-with-computer-use.md</path>
+        <title>Story 2.5: Phase 3 - Gameplay Exploration with Computer Use</title>
+        <section>Learnings from Previous Story</section>
+        <snippet>From Story 2.5: Screenshots stored incrementally to R2 during Phase 3, console logs accumulated in this.state.evidence.consoleLogs, network errors accumulated in this.state.evidence.networkErrors, AI decisions logged to Agent SQL decision_log table. Phase 4 should retrieve all evidence from Phases 1-3.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/agents/TestAgent.ts</path>
+        <kind>durable-object</kind>
+        <symbol>TestAgent class, runPhase4() method</symbol>
+        <lines>302-313</lines>
+        <reason>TestAgent class contains placeholder runPhase4() method that needs full implementation. Method should retrieve evidence from R2 and DO state, call AI Gateway vision model, generate scores, store to D1, flush logs to R2, and return Phase4Result.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/types.ts</path>
+        <kind>type-definition</kind>
+        <symbol>Phase4Result, MetricScore interfaces</symbol>
+        <lines>175-183</lines>
+        <reason>PhaseResult interface exists but Phase4Result and MetricScore types need to be added. Phase4Result should have success, overallScore, metrics array. MetricScore should have name, score, justification fields.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/ai-gateway.ts</path>
+        <kind>helper-function</kind>
+        <symbol>callAI() function</symbol>
+        <lines>48-106</lines>
+        <reason>callAI() helper function routes AI requests through AI Gateway with automatic failover. Supports vision models via images ArrayBuffer[] parameter. Use modelPreference 'primary' for Workers AI vision model, automatic fallback to OpenAI GPT-4o if primary fails.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/r2.ts</path>
+        <kind>helper-function</kind>
+        <symbol>getTestArtifacts(), uploadLog() functions</symbol>
+        <lines>307-371, 191-228</lines>
+        <reason>getTestArtifacts() retrieves all artifacts (screenshots and logs) from R2 for a test run. Returns TestArtifact[] with type 'screenshot' or 'log'. uploadLog() uploads or appends log content to R2 using LogType enum (CONSOLE, NETWORK, AGENT_DECISIONS).</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/d1.ts</path>
+        <kind>helper-function</kind>
+        <symbol>insertEvaluationScore(), updateTestStatus() functions</symbol>
+        <lines>223-249, 107-132</lines>
+        <reason>insertEvaluationScore() inserts single evaluation score row to D1 evaluation_scores table. updateTestStatus() updates test_runs.status and sets completed_at timestamp. Use insertEvaluationScore() 6 times (5 metrics + overall), then updateTestStatus() to set status 'completed'.</reason>
+      </artifact>
+      <artifact>
+        <path>src/agents/TestAgent.ts</path>
+        <kind>durable-object</kind>
+        <symbol>updateStatus() helper method</symbol>
+        <lines>318-346</lines>
+        <reason>updateStatus() helper logs to D1 test_events and broadcasts via WebSocket. Use for Phase 4 final results broadcast with overall score and metric scores. Rate limited to 1 event per 5 seconds.</reason>
+      </artifact>
+      <artifact>
+        <path>src/agents/TestAgent.ts</path>
+        <kind>durable-object</kind>
+        <symbol>TestAgentState interface, evidence structure</symbol>
+        <lines>12-13</lines>
+        <reason>TestAgentState should include evidence structure for console logs and network errors. Based on story requirements, DO state should have evidence.consoleLogs and evidence.networkErrors arrays accumulated from Phases 1-3. Phase 4 retrieves these for evaluation and log flushing.</reason>
+      </artifact>
+      <artifact>
+        <path>src/agents/TestAgent.ts</path>
+        <kind>durable-object</kind>
+        <symbol>execSQL() helper method</symbol>
+        <lines>239-249</lines>
+        <reason>execSQL() helper executes parameterized queries on Agent SQL database. Use to query decision_log table for Phase 4 agent-decisions.log generation. Query: SELECT * FROM decision_log ORDER BY timestamp ASC to retrieve all decisions logged during Phase 3.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem>node</ecosystem>
+      <packages>
+        <package name="stagehand" version="latest">Browser automation library (from previous stories)</package>
+        <package name="@cloudflare/workers-types" version="^4.0.0">TypeScript types for Workers APIs</package>
+        <package name="typescript" version="latest">TypeScript compiler</package>
+        <package name="wrangler" version="latest">Cloudflare Workers CLI</package>
+      </packages>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-002: Single TestAgent Durable Object per test run (DO ID = test UUID). Phase 4 executes within same DO instance that ran Phases 1-3, preserving state and evidence.</constraint>
+    <constraint>ADR-004: AI Gateway as Primary Entry Point for All AI Requests - Phase 4 evaluation MUST route through AI Gateway using callAI() helper, not direct provider access.</constraint>
+    <constraint>ADR-007: Data Storage Strategy - D1 for metadata (evaluation_scores, test_runs), R2 for evidence (screenshots, logs), Agent SQL for ephemeral per-test data (decision_log).</constraint>
+    <constraint>Timeout constraint: Phase 4 execution must complete within 60 seconds total.</constraint>
+    <constraint>Weighted scoring: Overall score uses weighted average (Load 15%, Visual 20%, Controls 20%, Playability 30%, Technical 15%). Formula: overall = (load * 0.15) + (visual * 0.20) + (controls * 0.20) + (playability * 0.30) + (technical * 0.15).</constraint>
+    <constraint>Graceful degradation: If AI Gateway fails, use fallback scoring based on technical data only (Phase 1 results, console errors, network errors). Never fail Phase 4 completely - always provide partial results.</constraint>
+    <constraint>Evidence completeness: Phase 4 can run with partial evidence (if Phase 1-3 failed partially). Handle missing screenshots gracefully - use fallback scoring if no screenshots available.</constraint>
+    <constraint>Score validation: Ensure all scores are integers between 0-100. Clamp scores to 0-100 range if out of bounds. Handle missing scores (use fallback values).</constraint>
+    <constraint>Justification requirement: Each metric score must include 2-3 sentence justification referencing specific evidence (screenshots, errors, observations). If AI justification is generic, enhance with specific evidence.</constraint>
+    <constraint>D1 schema: evaluation_scores table stores 6 rows (5 metrics + overall) with test_run_id, metric_name ('load', 'visual', 'controls', 'playability', 'technical', 'overall'), score (0-100), justification, created_at.</constraint>
+    <constraint>R2 log flushing: Upload console.log, network.log, agent-decisions.log to R2 using uploadLog() helper with LogType.CONSOLE, LogType.NETWORK, LogType.AGENT_DECISIONS. Logs are evidence (not critical for Phase 4 completion) - if upload fails, log error but don't fail Phase 4.</constraint>
+    <constraint>Browser session closure: Verify browser session closed (if still open from Phase 3) before Phase 4 completes. Use closeBrowser() helper if browser session exists.</constraint>
+    <constraint>Error handling pattern: User-friendly error messages pattern established in previous stories - follow same approach for Phase 4 errors. Never expose stack traces, internal error codes, infrastructure details.</constraint>
+    <constraint>WebSocket broadcast: Final results broadcast via updateStatus() helper which handles rate limiting (1 event per 5 seconds). If broadcast fails, log error but don't fail Phase 4.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>callAI() helper function</name>
+      <kind>function-signature</kind>
+      <signature>callAI(env: { AI: Ai; DB: D1Database }, prompt: string, images?: ArrayBuffer[], modelPreference?: ModelPreference, testRunId?: string, customMetadata?: Record&lt;string, unknown&gt;): Promise&lt;DbResult&lt;AIResponse&gt;&gt;</signature>
+      <path>src/shared/helpers/ai-gateway.ts</path>
+    </interface>
+    <interface>
+      <name>getTestArtifacts() helper function</name>
+      <kind>function-signature</kind>
+      <signature>getTestArtifacts(r2: R2Bucket, testId: string, env: Env): Promise&lt;DbResult&lt;TestArtifact[]&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    <interface>
+      <name>uploadLog() helper function</name>
+      <kind>function-signature</kind>
+      <signature>uploadLog(r2: R2Bucket, testId: string, logType: LogType, content: string): Promise&lt;DbResult&lt;string&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    <interface>
+      <name>insertEvaluationScore() helper function</name>
+      <kind>function-signature</kind>
+      <signature>insertEvaluationScore(db: D1Database, testRunId: string, metricName: string, score: number, justification: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    <interface>
+      <name>updateTestStatus() helper function</name>
+      <kind>function-signature</kind>
+      <signature>updateTestStatus(db: D1Database, id: string, status: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    <interface>
+      <name>Phase4Result interface (to be defined)</name>
+      <kind>typescript-interface</kind>
+      <signature>interface Phase4Result { success: boolean; overallScore: number; metrics: MetricScore[]; }</signature>
+      <path>src/shared/types.ts</path>
+    </interface>
+    <interface>
+      <name>MetricScore interface (to be defined)</name>
+      <kind>typescript-interface</kind>
+      <signature>interface MetricScore { name: string; score: number; justification: string; }</signature>
+      <path>src/shared/types.ts</path>
+    </interface>
+    <interface>
+      <name>TestAgentState.evidence structure</name>
+      <kind>typescript-interface</kind>
+      <signature>evidence: { consoleLogs: string[]; networkErrors: NetworkError[]; } - Console logs and network errors accumulated in DO state from Phases 1-3</signature>
+      <path>src/agents/TestAgent.ts (may need extension)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests required for Phase 4 execution with real evidence. Test screenshots retrieved from R2, console logs and network errors retrieved from DO state, AI Gateway called with vision model, scores generated for 5 metrics + overall, evaluation_scores stored to D1 (6 rows), test_runs.status updated to 'completed', logs flushed to R2, WebSocket broadcast. AI evaluation tests: valid screenshots (should generate scores), no screenshots (should use fallback scoring), AI Gateway failure (should use fallback scoring), malformed AI response (should use fallback scoring). Score calculation tests: overall score calculation with various metric scores, score clamping (0-100 range), missing metric scores (use fallback). Evidence retrieval tests: screenshot retrieval from R2, console log retrieval from DO state, network error retrieval from DO state, AI decision log retrieval from Agent SQL. D1 storage tests: evaluation_scores inserts (6 rows), test_runs.overall_score update, test_runs.status update to 'completed'. Error handling tests: AI Gateway unavailable, D1 database unavailable, R2 bucket unavailable, missing evidence (partial Phase 1-3 completion). Manual testing via wrangler dev mode for integration and E2E testing.</standards>
+    <locations>tests/ directory for integration tests (testagent-integration.ts pattern from Story 2.5). Manual testing via wrangler dev mode for Phase 4 execution validation.</locations>
+    <ideas>
+      <test id="ac-1">Verify runPhase4() method exists in TestAgent class and executes Phase 4 logic</test>
+      <test id="ac-2">Test getTestArtifacts() retrieves all screenshots from R2 for test run, filter to screenshots only</test>
+      <test id="ac-3">Test console logs and network errors retrieved from DO state (this.state.evidence.consoleLogs, this.state.evidence.networkErrors)</test>
+      <test id="ac-4">Test callAI() called with vision model preference 'primary', screenshot ArrayBuffers passed, prompt includes scoring rubric</test>
+      <test id="ac-5">Test scores generated (0-100) for 5 metrics: load, visual, controls, playability, technical</test>
+      <test id="ac-6">Test overall score calculation: (load * 0.15) + (visual * 0.20) + (controls * 0.20) + (playability * 0.30) + (technical * 0.15), rounded to integer</test>
+      <test id="ac-7">Test justifications generated (2-3 sentences) for each metric, referencing specific evidence</test>
+      <test id="ac-8">Test insertEvaluationScore() called 6 times (5 metrics + overall), verify all 6 rows inserted to D1 evaluation_scores table</test>
+      <test id="ac-9">Test test_runs.overall_score updated with calculated overall score</test>
+      <test id="ac-10">Test uploadLog() called 3 times: console.log, network.log, agent-decisions.log uploaded to R2</test>
+      <test id="ac-11">Test test_runs.status updated to 'completed', completed_at timestamp set</test>
+      <test id="ac-12">Test updateStatus() called with final results, verify WebSocket broadcast</test>
+      <test id="ac-13">Test Phase4Result returned with success: true, overallScore: number, metrics: MetricScore[] array</test>
+      <test id="fallback">Test AI Gateway failure triggers fallback scoring based on technical data (Phase 1 results, console errors, network errors)</test>
+      <test id="partial-evidence">Test Phase 4 runs with partial evidence (if Phase 1-3 failed partially), uses available screenshots/logs</test>
+      <test id="no-screenshots">Test Phase 4 handles missing screenshots gracefully, uses fallback scoring based on technical data only</test>
+      <test id="score-clamping">Test score clamping: scores outside 0-100 range are clamped, missing scores use fallback values</test>
+    </ideas>
+  </tests>
+</story-context>
+

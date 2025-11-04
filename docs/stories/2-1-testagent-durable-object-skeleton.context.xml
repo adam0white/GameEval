@@ -1,0 +1,268 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.1</storyId>
+    <title>TestAgent Durable Object Skeleton</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/2-1-testagent-durable-object-skeleton.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a TestAgent Durable Object with state management and lifecycle hooks</iWant>
+    <soThat>I have the foundation for AI-powered test execution.</soThat>
+    <tasks>
+      <task id="1">Create TestAgent Durable Object Class (AC: 1, 2)</task>
+      <task id="2">Initialize Agent SQL Database (AC: 3)</task>
+      <task id="3">Implement WebSocket Handler (AC: 4)</task>
+      <task id="4">Define Phase Methods (Empty Implementations) (AC: 5)</task>
+      <task id="5">Implement updateStatus() Helper Method (AC: 6)</task>
+      <task id="6">Implement storeEvidence() Helper Method (AC: 7)</task>
+      <task id="7">Implement Error Handling Wrapper (AC: 8)</task>
+      <task id="8">Configure DO Binding and Workflow Integration (AC: 9)</task>
+      <task id="9">Add TypeScript Types and Interfaces</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Durable Object class created: `src/agents/TestAgent.ts` implements DurableObject interface with proper TypeScript types</ac>
+    <ac id="2">DO constructor accepts: testRunId (string), gameUrl (string), inputSchema (optional JSON string)</ac>
+    <ac id="3">State storage initialized: Built-in SQL database initialized with tables: `agent_actions`, `control_discoveries`, `decision_log`</ac>
+    <ac id="4">WebSocket handler: WebSocket endpoint at `/ws` for real-time progress updates to dashboard</ac>
+    <ac id="5">Methods defined: Empty implementations for `runPhase1()`, `runPhase2()`, `runPhase3()`, `runPhase4()` methods</ac>
+    <ac id="6">Helper method `updateStatus()`: Logs to D1 test_events table and broadcasts via WebSocket to connected clients</ac>
+    <ac id="7">Helper method `storeEvidence()`: Saves evidence (screenshots, logs) to R2 and tracks metadata in DO state</ac>
+    <ac id="8">Error handling wrapper: All phase methods wrapped in try-catch blocks that return user-friendly error messages</ac>
+    <ac id="9">DO instantiation: TestAgent can be instantiated by Workflow with test run UUID as DO ID using `env.TEST_AGENT.idFromString(testRunId)`</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics/epic-2-ai-test-agent-browser-automation.md</path>
+        <title>Epic 2: AI Test Agent & Browser Automation</title>
+        <section>Story 2.1: TestAgent Durable Object Skeleton</section>
+        <snippet>Establishes the core TestAgent Durable Object that will serve as the stateful execution engine for all game testing. DO ID = test run UUID (1:1 mapping per test). Uses Cloudflare Agents SDK pattern with built-in state persistence, WebSocket communication, and per-agent SQL storage.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2-tech-context.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Services and Modules - TestAgent Durable Object</section>
+        <snippet>TestAgent Durable Object class structure with RPC interface. Includes Agent SQL schema (agent_actions, control_discoveries, decision_log tables). TestAgent state structure with browser session, evidence, and WebSocket clients. Phase result types and input schema format.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/novel-pattern-designs.md</path>
+        <title>Novel Pattern Designs</title>
+        <section>Pattern 1: TestAgent as Durable Object (Single Agent Per Test)</section>
+        <snippet>TestAgent Durable Object implementation guide with built-in WebSocket and SQL storage. Data flow from Dashboard → Workflow → TestAgent DO → Phases. Agent SQL storage for agent_actions, control_discoveries, decision_log. Implementation example with TypeScript class structure.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records</title>
+        <section>ADR-002: Single TestAgent Durable Object Per Test</section>
+        <snippet>Decision: Each test run managed by one TestAgent Durable Object (DO ID = test UUID), persisting across all 4 phases and retries. Rationale: simplifies state management, browser session persists across phases, evidence accumulates naturally, clear ownership.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records</title>
+        <section>ADR-006: WebSocket for Real-Time Updates, Polling as Fallback</section>
+        <snippet>Decision: Use Agents SDK WebSocket API for real-time progress updates, with 3-second polling as fallback. Rate limit WebSocket (1 event/5 sec) to avoid spam. Affects Epic 2 (TestAgent events) and Epic 3 (Dashboard UI).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records</title>
+        <section>ADR-007: Agent SQL for Ephemeral Per-Test Data, D1 for Cross-Test Metadata</section>
+        <snippet>Decision: Use Agent SQL (built into Durable Objects) for per-test reasoning/decisions, and D1 for persistent cross-test metadata. Agent SQL perfect for ephemeral data (AI decisions, action history). D1 optimized for cross-test queries.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/api-contracts.md</path>
+        <title>API Contracts</title>
+        <section>Workflow → TestAgent DO (Phase Execution)</section>
+        <snippet>TestAgent Durable Object RPC interface with phase endpoints (/phase1, /phase2, /phase3, /phase4). PhaseRequest and PhaseResponse types. WebSocket connection via Worker proxy. TestAgent.fetch() handles HTTP and WebSocket requests.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd/6-technical-architecture.md</path>
+        <title>Technical Architecture</title>
+        <section>6.2 Architecture Pattern: Workflows + Agents SDK</section>
+        <snippet>TestAgent Durable Object lifecycle: Workflow creates TestAgent DO with test run ID, TestAgent persists for all 4 phases (same browser session, same state), evidence captured incrementally, final evaluation reviews all accumulated evidence. One TestAgent instance per test run with unique ID, state management, browser session, evidence storage, WebSocket communication, built-in SQL database.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd/11b-references-resources.md</path>
+        <title>References & Resources</title>
+        <section>Cloudflare Documentation</section>
+        <snippet>Cloudflare Agents SDK documentation: https://developers.cloudflare.com/agents/ - Core pattern for AI agents as Durable Objects. Durable Objects Documentation: https://developers.cloudflare.com/durable-objects/. Agents SDK WebSocket API: https://developers.cloudflare.com/agents/features/websockets/. Agents SDK SQL Storage: https://developers.cloudflare.com/agents/features/sql/. Workflow Documentation: https://developers.cloudflare.com/workflows/.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-5-ai-gateway-configuration.md</path>
+        <title>Story 1.5: AI Gateway Configuration</title>
+        <section>Dev Agent Record - Learnings from Previous Story</section>
+        <snippet>AI Gateway Helper Available: callAI() function available at src/shared/helpers/ai-gateway.ts. Event Logging Pattern: Extended insertTestEvent() supports metadata parameter - use for logging AI decisions and costs. Type Safety: All helpers use proper TypeScript types - follow same pattern for TestAgent. Error Handling: User-friendly error messages pattern established.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/agents/TestAgent.ts</path>
+        <kind>durable-object</kind>
+        <symbol>TestAgent</symbol>
+        <lines>1-22</lines>
+        <reason>Existing skeleton TestAgent class implementing DurableObject interface. Needs full implementation with WebSocket handler, phase methods, SQL initialization, and helper methods.</reason>
+      </artifact>
+      <artifact>
+        <path>src/workflows/GameTestPipeline.ts</path>
+        <kind>workflow</kind>
+        <symbol>GameTestPipeline</symbol>
+        <lines>235-270</lines>
+        <reason>Workflow launchAgent() method shows how TestAgent DO is instantiated: env.TEST_AGENT.idFromString(testRunId), env.TEST_AGENT.get(testAgentId), testAgent.fetch('/init'). TestAgent must implement /init endpoint for initialization.</reason>
+      </artifact>
+      <artifact>
+        <path>src/workflows/GameTestPipeline.ts</path>
+        <kind>workflow</kind>
+        <symbol>GameTestPipeline.executePhase</symbol>
+        <lines>280-360</lines>
+        <reason>Workflow calls TestAgent phase endpoints: testAgent.fetch(`http://testAgent/${phase}`, { method: 'POST' }). TestAgent must implement /phase1, /phase2, /phase3, /phase4 endpoints that return PhaseResponse with success/error.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/d1.ts</path>
+        <kind>helper</kind>
+        <symbol>insertTestEvent</symbol>
+        <lines>144-183</lines>
+        <reason>Helper function for logging to D1 test_events table. Accepts testRunId, phase, eventType, description, optional metadata. Used by updateStatus() helper method (AC-6).</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/r2.ts</path>
+        <kind>helper</kind>
+        <symbol>uploadScreenshot</symbol>
+        <lines>138-162</lines>
+        <reason>Helper function for uploading screenshots to R2. Accepts r2 bucket, testId, phase, action, buffer. Returns DbResult with R2 object key. Used by storeEvidence() helper method (AC-7).</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/r2.ts</path>
+        <kind>helper</kind>
+        <symbol>uploadLog</symbol>
+        <lines>191-228</lines>
+        <reason>Helper function for uploading logs to R2. Accepts r2 bucket, testId, logType, content. Uses fetch-modify-put pattern for appending. Used by storeEvidence() helper method (AC-7).</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/types.ts</path>
+        <kind>types</kind>
+        <symbol>DbResult</symbol>
+        <lines>56-58</lines>
+        <reason>Generic database result wrapper type for error handling. Used by all helper functions. Pattern to follow for TestAgent method return types.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/constants.ts</path>
+        <kind>constants</kind>
+        <symbol>Phase</symbol>
+        <lines>53-58</lines>
+        <reason>Phase enum with PHASE1-PHASE4 values. Used for phase identification in TestAgent methods and event logging.</reason>
+      </artifact>
+      <artifact>
+        <path>wrangler.toml</path>
+        <kind>config</kind>
+        <symbol>durable_objects.bindings</symbol>
+        <lines>40-43</lines>
+        <reason>Durable Objects binding configuration for TEST_AGENT. name = "TEST_AGENT", class_name = "TestAgent", script_name = "gameeval-qa-pipeline". Must match TestAgent class export.</reason>
+      </artifact>
+      <artifact>
+        <path>wrangler.toml</path>
+        <kind>config</kind>
+        <symbol>migrations</symbol>
+        <lines>46-48</lines>
+        <reason>Durable Objects migrations section. Tag = "v1", new_classes = ["TestAgent"]. Ensures TestAgent class is registered for DO instantiation.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem>node</ecosystem>
+      <packages>
+        <package name="stagehand" version="latest">Browser automation library (not used in Story 2.1, but referenced for future stories)</package>
+        <package name="@cloudflare/workers-types" version="^4.0.0">TypeScript types for Workers APIs, Durable Objects, WebSockets (devDependency)</package>
+        <package name="@cloudflare/ai" version="^1.0.0">AI Gateway SDK (not used in Story 2.1, but available for future phases)</package>
+        <package name="typescript" version="latest">TypeScript compiler (devDependency)</package>
+        <package name="wrangler" version="latest">Cloudflare Workers CLI for deployment (devDependency)</package>
+      </packages>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-002: Single TestAgent Durable Object per test run (DO ID = test UUID). TestAgent must persist across all 4 phases and workflow retries.</constraint>
+    <constraint>ADR-001: RPC-only architecture. No exposed HTTP APIs. All communication via service bindings (Workflow → TestAgent DO via env.TEST_AGENT binding).</constraint>
+    <constraint>ADR-007: Use Agent SQL (built into Durable Objects) for per-test ephemeral data (agent_actions, control_discoveries, decision_log). Use D1 for persistent cross-test metadata (test_events, test_runs).</constraint>
+    <constraint>ADR-006: WebSocket rate limiting - Max 1 event per 5 seconds to prevent spam. WebSocket connections proxied through Worker (no direct DO access).</constraint>
+    <constraint>Error handling: All phase methods must return user-friendly error messages. Never expose stack traces, internal error codes, or infrastructure details.</constraint>
+    <constraint>TypeScript strict mode: All code must use proper TypeScript types. Follow existing patterns from Epic 1 helpers (DbResult, type safety).</constraint>
+    <constraint>Reuse existing helpers: Use insertTestEvent() from src/shared/helpers/d1.ts, uploadScreenshot() and uploadLog() from src/shared/helpers/r2.ts. Do not recreate these functions.</constraint>
+    <constraint>DO export pattern: Use `export default TestAgent` for Durable Object class. Also export as named export: `export { TestAgent }`.</constraint>
+    <constraint>Workflow integration: TestAgent must implement /init endpoint for initialization (accepts testRunId, gameUrl, inputSchema). TestAgent must implement /phase1, /phase2, /phase3, /phase4 endpoints for phase execution.</constraint>
+    <constraint>Agent SQL initialization: Tables must be created lazily (on first use) or in constructor. Use this.state.storage API for Agent SQL operations.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>TestAgent.fetch()</name>
+      <kind>HTTP/WebSocket handler</kind>
+      <signature>async fetch(request: Request): Promise&lt;Response&gt;</signature>
+      <path>src/agents/TestAgent.ts</path>
+    </interface>
+    <interface>
+      <name>TestAgent initialization endpoint</name>
+      <kind>RPC endpoint</kind>
+      <signature>POST /init - Body: { testRunId: string, gameUrl: string, inputSchema?: string }</signature>
+      <path>src/agents/TestAgent.ts</path>
+    </interface>
+    <interface>
+      <name>TestAgent phase endpoints</name>
+      <kind>RPC endpoint</kind>
+      <signature>POST /phase1, POST /phase2, POST /phase3, POST /phase4 - Returns: { success: boolean, message?: string, data?: any }</signature>
+      <path>src/agents/TestAgent.ts</path>
+    </interface>
+    <interface>
+      <name>TestAgent WebSocket endpoint</name>
+      <kind>WebSocket upgrade</kind>
+      <signature>GET /ws - Upgrades HTTP request to WebSocket connection</signature>
+      <path>src/agents/TestAgent.ts</path>
+    </interface>
+    <interface>
+      <name>insertTestEvent()</name>
+      <kind>function</kind>
+      <signature>insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string, metadata?: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    <interface>
+      <name>uploadScreenshot()</name>
+      <kind>function</kind>
+      <signature>uploadScreenshot(r2: R2Bucket, testId: string, phase: Phase, action: string, buffer: ArrayBuffer): Promise&lt;DbResult&lt;string&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    <interface>
+      <name>uploadLog()</name>
+      <kind>function</kind>
+      <signature>uploadLog(r2: R2Bucket, testId: string, logType: LogType, content: string): Promise&lt;DbResult&lt;string&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    <interface>
+      <name>Workflow → TestAgent DO binding</name>
+      <kind>RPC service binding</kind>
+      <signature>env.TEST_AGENT.idFromString(testRunId): DurableObjectId, env.TEST_AGENT.get(id): DurableObjectStub</signature>
+      <path>wrangler.toml, src/workflows/GameTestPipeline.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Unit tests for helper methods (updateStatus(), storeEvidence()) with mocks. Integration tests for DO instantiation via Workflow binding. WebSocket tests for connection and message broadcasting. Error handling tests verify user-friendly error messages, no stack traces exposed. SQL tests verify Agent SQL tables are created correctly. Manual testing via Wrangler dev mode acceptable for MVP. Focus on integration and E2E testing over unit tests.</standards>
+    <locations>Manual testing via `wrangler dev` local environment. Integration tests in Cloudflare dashboard. Unit tests optional (can be added in tests/ directory if needed).</locations>
+    <ideas>
+      <test ac="1">Verify TestAgent class exists, implements DurableObject interface, has proper TypeScript types</test>
+      <test ac="2">Test DO constructor accepts testRunId, gameUrl, inputSchema (optional). Initialize TestAgent via /init endpoint, verify state stored</test>
+      <test ac="3">Test Agent SQL tables created: agent_actions, control_discoveries, decision_log. Verify tables exist via this.state.storage API</test>
+      <test ac="4">Test WebSocket connection: Connect to /ws endpoint, verify WebSocket upgrade successful, verify messages received</test>
+      <test ac="5">Test phase methods exist: Call /phase1, /phase2, /phase3, /phase4 endpoints, verify methods return responses (can be empty implementations)</test>
+      <test ac="6">Test updateStatus() helper: Call updateStatus(), verify D1 test_events entry created, verify WebSocket broadcast sent to connected clients</test>
+      <test ac="7">Test storeEvidence() helper: Call storeEvidence() with screenshot/log, verify R2 object created, verify DO state updated with metadata</test>
+      <test ac="8">Test error handling: Trigger phase method with error, verify try-catch catches error, verify user-friendly error message returned (no stack traces)</test>
+      <test ac="9">Test DO instantiation: Workflow calls env.TEST_AGENT.idFromString(testRunId), env.TEST_AGENT.get(id), verify TestAgent.fetch() receives requests</test>
+    </ideas>
+  </tests>
+</story-context>
+
