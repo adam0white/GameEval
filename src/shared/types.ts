@@ -7,6 +7,50 @@
  * Add custom application types here as needed for future stories
  */
 
-// Placeholder for future custom types
-export {};
+// Database result types (Story 1.2)
+
+/**
+ * TestRun represents a test execution in the database
+ */
+export interface TestRun {
+  id: string;
+  url: string;
+  input_schema: string | null;
+  status: string;
+  overall_score: number | null;
+  created_at: number;
+  updated_at: number;
+  completed_at: number | null;
+}
+
+/**
+ * EvaluationScore represents a single metric score for a test run
+ */
+export interface EvaluationScore {
+  id: number;
+  test_run_id: string;
+  metric_name: string;
+  score: number;
+  justification: string;
+  created_at: number;
+}
+
+/**
+ * TestEvent represents a logged event during test execution
+ */
+export interface TestEvent {
+  id: number;
+  test_run_id: string;
+  phase: string;
+  event_type: string;
+  description: string;
+  timestamp: number;
+}
+
+/**
+ * Generic database result wrapper for error handling
+ */
+export type DbResult<T> = 
+  | { success: true; data: T }
+  | { success: false; error: string };
 

@@ -99,6 +99,51 @@ npx wrangler d1 create gameeval-db
 
 Copy the `database_id` from the output to `wrangler.toml`.
 
+## Database Migrations
+
+### Running Migrations
+
+The project uses numbered SQL migration files in `/migrations`:
+
+```bash
+# Test migrations locally first
+npx wrangler d1 execute gameeval-db --local --file=migrations/0001_create_test_runs.sql
+npx wrangler d1 execute gameeval-db --local --file=migrations/0002_create_evaluation_scores.sql
+npx wrangler d1 execute gameeval-db --local --file=migrations/0003_create_test_events.sql
+
+# Verify local tables created
+npx wrangler d1 execute gameeval-db --local --command="SELECT name FROM sqlite_master WHERE type='table'"
+
+# Run on remote database (production)
+npx wrangler d1 execute gameeval-db --remote --file=migrations/0001_create_test_runs.sql
+npx wrangler d1 execute gameeval-db --remote --file=migrations/0002_create_evaluation_scores.sql
+npx wrangler d1 execute gameeval-db --remote --file=migrations/0003_create_test_events.sql
+
+# Verify remote tables and indexes
+npx wrangler d1 execute gameeval-db --remote --command="SELECT name FROM sqlite_master WHERE type='index' ORDER BY name"
+```
+
+### Migration Safety
+
+- All migrations use `IF NOT EXISTS` - safe to re-run
+- Test locally with `--local` flag before deploying
+- Foreign key constraints use `ON DELETE CASCADE` for referential integrity
+- Indexes created automatically for optimal query performance
+
+### Database Schema
+
+**Tables:**
+- `test_runs` - Test execution metadata
+- `evaluation_scores` - AI evaluation scores (6 metrics)
+- `test_events` - Event log for test phases
+
+**Indexes:**
+- `idx_test_runs_status` - Filter by status
+- `idx_test_runs_created_at` - Sort by date (DESC)
+- `idx_evaluation_scores_test_run_id` - Join scores to tests
+- `idx_test_events_test_run_id` - Join events to tests
+- `idx_test_events_timestamp` - Sort events chronologically
+
 ## Next Steps
 
 After successful setup:
@@ -107,6 +152,7 @@ After successful setup:
 2. ✅ TypeScript types generated
 3. ✅ Local development working
 4. ✅ Resources created in Cloudflare
+5. ✅ Database migrations completed (Story 1.2)
 
-Ready to implement Story 1.2: D1 Database Schema and Migrations!
+Ready to implement Story 1.3: R2 Storage Setup!
 

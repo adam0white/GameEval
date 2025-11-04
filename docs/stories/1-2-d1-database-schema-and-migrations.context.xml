@@ -1,0 +1,362 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.2</storyId>
+    <title>D1 Database Schema and Migrations</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-04</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-2-d1-database-schema-and-migrations.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a complete D1 database schema for test metadata</iWant>
+    <soThat>I can store and query test runs, results, and events</soThat>
+    <tasks>
+      <task id="1" acs="2,5,6">
+        <title>Create test_runs Table Migration</title>
+        <subtasks>
+          - Create file migrations/0001_create_test_runs.sql
+          - Add CREATE TABLE statement with all columns (id, url, input_schema, status, overall_score, created_at, updated_at, completed_at)
+          - Use IF NOT EXISTS clause for idempotency
+          - Add index: idx_test_runs_status on status column
+          - Add index: idx_test_runs_created_at on created_at DESC
+          - Test migration locally: wrangler d1 execute gameeval-db --local --file=migrations/0001_create_test_runs.sql
+          - Verify table created: wrangler d1 execute gameeval-db --local --command="SELECT name FROM sqlite_master WHERE type='table'"
+        </subtasks>
+      </task>
+      
+      <task id="2" acs="3,5,6">
+        <title>Create evaluation_scores Table Migration</title>
+        <subtasks>
+          - Create file migrations/0002_create_evaluation_scores.sql
+          - Add CREATE TABLE statement with all columns (id, test_run_id, metric_name, score, justification, created_at)
+          - Add FOREIGN KEY constraint referencing test_runs(id)
+          - Use IF NOT EXISTS clause for idempotency
+          - Add index: idx_evaluation_scores_test_run_id on test_run_id column
+          - Test migration locally: wrangler d1 execute gameeval-db --local --file=migrations/0002_create_evaluation_scores.sql
+          - Verify foreign key constraint works (test with invalid test_run_id)
+        </subtasks>
+      </task>
+      
+      <task id="3" acs="4,5,6">
+        <title>Create test_events Table Migration</title>
+        <subtasks>
+          - Create file migrations/0003_create_test_events.sql
+          - Add CREATE TABLE statement with all columns (id, test_run_id, phase, event_type, description, timestamp)
+          - Add FOREIGN KEY constraint referencing test_runs(id)
+          - Use IF NOT EXISTS clause for idempotency
+          - Add index: idx_test_events_test_run_id on test_run_id column
+          - Add index: idx_test_events_timestamp on timestamp DESC
+          - Test migration locally: wrangler d1 execute gameeval-db --local --file=migrations/0003_create_test_events.sql
+        </subtasks>
+      </task>
+      
+      <task id="4" acs="3,4">
+        <title>Enable Foreign Key Constraints</title>
+        <subtasks>
+          - Research D1 foreign key support (SQLite compatibility)
+          - Add PRAGMA statement to enable foreign keys if needed
+          - Document foreign key behavior in constants or README
+          - Test cascading behavior (optional for MVP)
+        </subtasks>
+      </task>
+      
+      <task id="5" acs="7">
+        <title>Implement D1 Helper Functions</title>
+        <subtasks>
+          - Update src/shared/helpers/d1.ts (replace placeholder)
+          - Implement createTestRun(db: D1Database, id: string, url: string, inputSchema?: string) - Insert new test run
+          - Implement getTestById(db: D1Database, id: string) - Retrieve test run with JOIN on scores
+          - Implement listRecentTests(db: D1Database, limit: number) - Query with ORDER BY created_at DESC
+          - Implement updateTestStatus(db: D1Database, id: string, status: string) - Update status and updated_at
+          - Implement insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string) - Log event with current timestamp
+          - Implement getTestEvents(db: D1Database, testRunId: string) - Retrieve events ordered by timestamp
+          - Implement insertEvaluationScore(db: D1Database, testRunId: string, metricName: string, score: number, justification: string) - Save score
+          - Add proper TypeScript types for all function parameters and return values
+          - Handle database errors gracefully (wrap in try/catch, return meaningful errors)
+        </subtasks>
+      </task>
+      
+      <task id="6" acs="2,3,4">
+        <title>Define TypeScript Types and Constants</title>
+        <subtasks>
+          - Update src/shared/types.ts with database result types: TestRun, EvaluationScore, TestEvent interfaces
+          - Update src/shared/constants.ts with enums: TestStatus, MetricName, Phase, EventType enums
+          - Add TABLE_NAMES constant object with table names
+          - Export all types and constants
+        </subtasks>
+      </task>
+      
+      <task id="7" acs="5">
+        <title>Run Migrations on Remote D1 Database</title>
+        <subtasks>
+          - Run migration 0001: wrangler d1 execute gameeval-db --remote --file=migrations/0001_create_test_runs.sql
+          - Run migration 0002: wrangler d1 execute gameeval-db --remote --file=migrations/0002_create_evaluation_scores.sql
+          - Run migration 0003: wrangler d1 execute gameeval-db --remote --file=migrations/0003_create_test_events.sql
+          - Verify tables exist in remote database
+          - Verify indexes created: wrangler d1 execute gameeval-db --remote --command="SELECT name FROM sqlite_master WHERE type='index'"
+        </subtasks>
+      </task>
+      
+      <task id="8" acs="7">
+        <title>Integration Testing</title>
+        <subtasks>
+          - Create test script or update src/index.ts with test endpoint (temporary)
+          - Test createTestRun() - insert a test run
+          - Test getTestById() - retrieve the test run
+          - Test updateTestStatus() - change status to 'running'
+          - Test insertTestEvent() - log multiple events
+          - Test getTestEvents() - retrieve events
+          - Test insertEvaluationScore() - save scores for all 6 metrics
+          - Test listRecentTests() - query multiple tests
+          - Verify all queries return expected TypeScript types
+          - Test error handling (invalid IDs, foreign key violations)
+        </subtasks>
+      </task>
+      
+      <task id="9">
+        <title>Documentation and Cleanup</title>
+        <subtasks>
+          - Document migration process in README.md or SETUP.md
+          - Add JSDoc comments to all helper functions
+          - Remove any temporary test endpoints from src/index.ts
+          - Run tsc --noEmit to verify no type errors
+          - Run wrangler dev to verify local environment still works
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">✅ D1 database bound to Workers - Database already created (ID: 59b4298a-451e-4d40-ba24-82861f7f8721) and configured in wrangler.toml</criterion>
+    <criterion id="2">test_runs table created with columns: id TEXT PRIMARY KEY (UUID), url TEXT NOT NULL, input_schema TEXT (JSON or NULL), status TEXT NOT NULL (enum: 'queued', 'running', 'completed', 'failed'), overall_score INTEGER (0-100 or NULL), created_at INTEGER NOT NULL (Unix timestamp), updated_at INTEGER NOT NULL, completed_at INTEGER (Unix timestamp or NULL)</criterion>
+    <criterion id="3">evaluation_scores table created with columns: id INTEGER PRIMARY KEY AUTOINCREMENT, test_run_id TEXT NOT NULL (foreign key to test_runs.id), metric_name TEXT NOT NULL (enum: 'load', 'visual', 'controls', 'playability', 'technical', 'overall'), score INTEGER NOT NULL (0-100), justification TEXT NOT NULL (explanation text), created_at INTEGER NOT NULL</criterion>
+    <criterion id="4">test_events table created with columns: id INTEGER PRIMARY KEY AUTOINCREMENT, test_run_id TEXT NOT NULL (foreign key to test_runs.id), phase TEXT NOT NULL (enum: 'phase1', 'phase2', 'phase3', 'phase4'), event_type TEXT NOT NULL (enum: 'started', 'progress', 'completed', 'failed', 'control_discovered', etc.), description TEXT NOT NULL, timestamp INTEGER NOT NULL</criterion>
+    <criterion id="5">Migration scripts in /migrations directory: 0001_create_test_runs.sql, 0002_create_evaluation_scores.sql, 0003_create_test_events.sql</criterion>
+    <criterion id="6">Database indexes created: idx_test_runs_status on test_runs(status), idx_test_runs_created_at on test_runs(created_at DESC), idx_evaluation_scores_test_run_id on evaluation_scores(test_run_id), idx_test_events_test_run_id on test_events(test_run_id), idx_test_events_timestamp on test_events(timestamp DESC)</criterion>
+    <criterion id="7">SQL helper functions implemented in src/shared/helpers/d1.ts: createTestRun(db: D1Database, id: string, url: string, inputSchema?: string) - Create new test run, getTestById(db: D1Database, id: string) - Retrieve test run by UUID, listRecentTests(db: D1Database, limit: number) - List recent tests ordered by created_at, updateTestStatus(db: D1Database, id: string, status: string) - Update test status, insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string) - Log event, getTestEvents(db: D1Database, testRunId: string) - Retrieve all events for a test, insertEvaluationScore(db: D1Database, testRunId: string, metricName: string, score: number, justification: string) - Save score</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture/data-architecture.md</path>
+        <title>Data Architecture</title>
+        <section>D1 Database Schema</section>
+        <snippet>Complete SQL schema definitions for all three tables (test_runs, evaluation_scores, test_events) with foreign key constraints, indexes, and column specifications. Includes Agent SQL Storage design and R2 storage structure. Defines input schema format for TestAgent guidance.</snippet>
+      </doc>
+      
+      <doc>
+        <path>docs/architecture/project-structure.md</path>
+        <title>Project Structure</title>
+        <section>Project Structure</section>
+        <snippet>Defines migrations/ directory for SQL migration scripts (0001_create_test_runs.sql, 0002_create_evaluation_scores.sql, 0003_create_test_events.sql). Shows src/shared/helpers/ location for d1.ts helper functions. Specifies src/shared/types.ts and constants.ts locations for database types and enums.</snippet>
+      </doc>
+      
+      <doc>
+        <path>docs/epics/epic-1-core-test-infrastructure.md</path>
+        <title>Epic 1: Core Test Infrastructure</title>
+        <section>Story 1.2: D1 Database Schema and Migrations</section>
+        <snippet>Full story requirements including database schema, migration scripts, helper functions, and integration with 4-phase test pipeline. Specifies test_runs table tracks lifecycle (queued → running → completed/failed), evaluation_scores stores 6 metric types, test_events logs progress through phases 1-4.</snippet>
+      </doc>
+      
+      <doc>
+        <path>docs/stories/1-1-project-setup-and-cloudflare-configuration.md</path>
+        <title>Story 1.1: Project Setup and Cloudflare Configuration</title>
+        <section>Dev Agent Record</section>
+        <snippet>Infrastructure foundation completed: D1 database created (ID: 59b4298a-451e-4d40-ba24-82861f7f8721) and bound at env.DB, migrations/ directory created (empty), src/shared/helpers/d1.ts placeholder created, wrangler.toml configured, TypeScript strict mode enabled with auto-generated types in worker-configuration.d.ts. Modern Cloudflare Workers patterns established using wrangler types.</snippet>
+      </doc>
+    </docs>
+    
+    <code>
+      <artifact>
+        <path>src/shared/types.ts</path>
+        <kind>types</kind>
+        <symbol>N/A (currently placeholder)</symbol>
+        <lines>1-13</lines>
+        <reason>Target file for adding database result types (TestRun, EvaluationScore, TestEvent interfaces) required by AC 7 and Task 6. Currently contains only placeholder comment, ready for implementation.</reason>
+      </artifact>
+      
+      <artifact>
+        <path>src/shared/constants.ts</path>
+        <kind>constants</kind>
+        <symbol>ERROR_MESSAGES, STATUS_CODES, TIMEOUTS</symbol>
+        <lines>1-27</lines>
+        <reason>Target file for adding database enums (TestStatus, MetricName, Phase, EventType) and TABLE_NAMES constant required by AC 2-4 and Task 6. Currently contains basic error messages and HTTP status codes.</reason>
+      </artifact>
+      
+      <artifact>
+        <path>src/shared/helpers/d1.ts</path>
+        <kind>helpers</kind>
+        <symbol>d1Helpers (placeholder)</symbol>
+        <lines>1-9</lines>
+        <reason>Target file for implementing all 7 D1 helper functions required by AC 7 and Task 5. Currently contains only placeholder object. Must replace with createTestRun, getTestById, listRecentTests, updateTestStatus, insertTestEvent, getTestEvents, insertEvaluationScore functions.</reason>
+      </artifact>
+      
+      <artifact>
+        <path>src/index.ts</path>
+        <kind>worker</kind>
+        <symbol>fetch handler</symbol>
+        <lines>1-40</lines>
+        <reason>Main Dashboard Worker entry point. May be used for temporary test endpoints during Task 8 integration testing. Currently returns health check at root endpoint and 404 for all other routes. Temporary test endpoints must be removed before story completion (Task 9).</reason>
+      </artifact>
+      
+      <artifact>
+        <path>wrangler.toml</path>
+        <kind>config</kind>
+        <symbol>d1_databases binding</symbol>
+        <lines>12-16</lines>
+        <reason>D1 database binding configuration (AC 1 already satisfied). Database name: gameeval-db, binding: DB, ID: 59b4298a-451e-4d40-ba24-82861f7f8721. Accessible via env.DB in Workers runtime. DO NOT modify this file - binding already configured correctly.</reason>
+      </artifact>
+    </code>
+    
+    <dependencies>
+      <node>
+        <stagehand>latest (for future browser automation in Epic 2)</stagehand>
+      </node>
+      <devDependencies>
+        <typescript>latest (strict mode enabled, ESNext target)</typescript>
+        <wrangler>latest (D1 CLI commands: execute, migrations)</wrangler>
+        <types-node>^24.10.0</types-node>
+      </devDependencies>
+      <cloudflare-runtime>
+        <D1Database>Built-in Workers API for database operations. Type auto-generated in worker-configuration.d.ts via wrangler types command. No external package required.</D1Database>
+      </cloudflare-runtime>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>TypeScript strict mode enabled - all database operations must be fully typed with no implicit any types. Use D1Database type from auto-generated worker-configuration.d.ts.</constraint>
+    <constraint>Migration scripts must use IF NOT EXISTS clause for idempotency (safe to re-run). Test locally with --local flag before deploying with --remote flag.</constraint>
+    <constraint>DO NOT recreate D1 database - already exists with ID 59b4298a-451e-4d40-ba24-82861f7f8721 and binding configured in wrangler.toml. DO NOT modify wrangler.toml D1 binding section.</constraint>
+    <constraint>UUID primary keys (test_runs.id) must be generated in application code using crypto.randomUUID(), not in database. Store as TEXT type.</constraint>
+    <constraint>All timestamps must be stored as INTEGER (Unix epoch in milliseconds) using Date.now() in JavaScript/TypeScript. Indexes on timestamp columns use DESC for recent-first queries.</constraint>
+    <constraint>SQLite foreign keys must be explicitly enabled with PRAGMA foreign_keys = ON per connection. Research D1 foreign key support and document behavior in Task 4.</constraint>
+    <constraint>Status and metric_name columns store TEXT values validated in application code using TypeScript enums (Task 6). Valid statuses: 'queued' | 'running' | 'completed' | 'failed'. Valid metrics: 'load' | 'visual' | 'controls' | 'playability' | 'technical' | 'overall'.</constraint>
+    <constraint>Helper functions must return Result type instead of throwing errors: type DbResult&lt;T&gt; = { success: true; data: T } | { success: false; error: string }. Wrap database operations in try/catch blocks.</constraint>
+    <constraint>Use D1 prepared statements API: db.prepare(sql).bind(...params). For single row: .first&lt;T&gt;() returns T | null. For multiple rows: .all&lt;T&gt;() returns { results: T[] }. For mutations: .run() returns { meta: { rows_written, rows_read } }.</constraint>
+    <constraint>Must pass tsc --noEmit with zero type errors before marking story complete. Test locally with wrangler dev before deploying.</constraint>
+    <constraint>Remove all temporary test endpoints from src/index.ts before completion (Task 9). Document migration process in README.md or SETUP.md with JSDoc comments on all helper functions.</constraint>
+    <constraint>No external database packages required - D1 client is built into Workers runtime. Access database via env.DB binding. Use db.batch([stmt1, stmt2, stmt3]) for atomic multi-table operations.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>D1Database</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise&lt;D1Result[]&gt;;
+  exec(query: string): Promise&lt;D1ExecResult&gt;;
+}
+
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first&lt;T = unknown&gt;(colName?: string): Promise&lt;T | null&gt;;
+  all&lt;T = unknown&gt;(): Promise&lt;D1Result&lt;T&gt;&gt;;
+  run(): Promise&lt;D1Result&gt;;
+}
+
+interface D1Result&lt;T = unknown&gt; {
+  results: T[];
+  success: boolean;
+  meta: {
+    rows_written: number;
+    rows_read: number;
+  };
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>Env</name>
+      <kind>Cloudflare Workers Environment Bindings</kind>
+      <signature>
+interface Env {
+  DB: D1Database;  // gameeval-db binding
+  EVIDENCE_BUCKET: R2Bucket;
+  BROWSER: Fetcher;
+  AI: Ai;
+  WORKFLOW: Workflow;
+  TEST_AGENT: DurableObjectNamespace;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>createTestRun</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function createTestRun(db: D1Database, id: string, url: string, inputSchema?: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>getTestById</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function getTestById(db: D1Database, id: string): Promise&lt;DbResult&lt;TestRun | null&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>listRecentTests</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function listRecentTests(db: D1Database, limit: number): Promise&lt;DbResult&lt;TestRun[]&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>updateTestStatus</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function updateTestStatus(db: D1Database, id: string, status: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>insertTestEvent</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>getTestEvents</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function getTestEvents(db: D1Database, testRunId: string): Promise&lt;DbResult&lt;TestEvent[]&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>insertEvaluationScore</name>
+      <kind>D1 helper function (to be implemented)</kind>
+      <signature>async function insertEvaluationScore(db: D1Database, testRunId: string, metricName: string, score: number, justification: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>TypeScript strict mode enforced - all code must pass tsc --noEmit with zero errors. Integration testing using wrangler dev locally before deploying. Test migrations with --local flag first, then deploy to remote database with --remote flag. Verify schema with SQLite master table queries. Test CRUD operations through temporary endpoints in src/index.ts (remove before completion). Validate foreign key constraints by attempting invalid test_run_id inserts. Test error handling with invalid UUIDs and missing data. All database queries must return properly typed results matching TypeScript interfaces.</standards>
+    
+    <locations>
+      <location>Integration tests via temporary endpoints in src/index.ts (Task 8)</location>
+      <location>Manual testing using wrangler dev and wrangler d1 execute commands</location>
+      <location>Schema validation queries: SELECT name FROM sqlite_master WHERE type='table' and WHERE type='index'</location>
+    </locations>
+    
+    <ideas>
+      <idea ac="2">Test createTestRun() creates valid test_run with UUID, url, initial status 'queued', and proper timestamps. Verify getTestById() retrieves the created test.</idea>
+      <idea ac="2">Test updateTestStatus() changes status from 'queued' to 'running', then to 'completed'. Verify updated_at timestamp changes and completed_at is set on completion.</idea>
+      <idea ac="3">Test insertEvaluationScore() for all 6 metric types (load, visual, controls, playability, technical, overall). Verify foreign key constraint rejects invalid test_run_id.</idea>
+      <idea ac="4">Test insertTestEvent() logs events for all 4 phases with different event types (started, progress, completed, failed, control_discovered). Test getTestEvents() retrieves events ordered by timestamp DESC.</idea>
+      <idea ac="5,6">Verify all 3 migration scripts are idempotent (safe to re-run). Test schema creation with wrangler d1 execute --local for each migration file. Verify indexes created with PRAGMA index_list(table_name) or sqlite_master query.</idea>
+      <idea ac="7">Test listRecentTests() returns tests ordered by created_at DESC with correct limit. Verify all helper functions return DbResult type with success/error handling.</idea>
+      <idea ac="7">Test error scenarios: invalid UUID format, NULL constraint violations, foreign key violations, database connection failures. Verify graceful error handling with meaningful error messages.</idea>
+      <idea ac="7">Test batch operations using db.batch() for atomic multi-table inserts (create test_run + initial event). Verify transaction rollback on failure.</idea>
+    </ideas>
+  </tests>
+</story-context>
+
