@@ -1,0 +1,421 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.5</storyId>
+    <title>AI Gateway Configuration</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-04</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-5-ai-gateway-configuration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>AI Gateway configured with Workers AI and frontier model fallback</iWant>
+    <soThat>all AI requests route through unified gateway with observability</soThat>
+    <tasks>
+      <task id="1" acs="1">
+        <title>Create AI Gateway Account and Endpoint</title>
+        <subtasks>
+          - Create AI Gateway in Cloudflare dashboard
+          - Note gateway endpoint URL: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/...
+          - Configure gateway name (e.g., gameeval-ai-gateway)
+          - Document account ID and gateway name for use in code
+          - Verify gateway is accessible and ready for configuration
+        </subtasks>
+      </task>
+      <task id="2" acs="2">
+        <title>Configure Primary Provider - Workers AI</title>
+        <subtasks>
+          - Verify [ai] binding in wrangler.toml is correctly configured (already exists)
+          - Test Workers AI binding with simple vision model call (Llama Vision or Gemini Flash)
+          - Document model names for vision tasks: @cf/meta/llama-3.2-11b-vision-instruct (Llama Vision), @cf/google/gemini-2.0-flash-exp (Gemini Flash)
+          - Verify model supports image inputs for screenshot analysis
+          - Test basic Workers AI call from Worker code
+        </subtasks>
+      </task>
+      <task id="3" acs="3">
+        <title>Configure Fallback Provider via AI Gateway</title>
+        <subtasks>
+          - Add OpenAI API key to Workers secrets: wrangler secret put AI_GATEWAY_OPENAI_API_KEY
+          - Add Anthropic API key to Workers secrets: wrangler secret put AI_GATEWAY_ANTHROPIC_API_KEY
+          - Configure AI Gateway to route to OpenAI GPT-4o endpoint
+          - Configure AI Gateway to route to Anthropic Claude 3.5 Sonnet endpoint
+          - Test fallback routing manually (simulate primary failure)
+          - Document fallback routing logic in code comments
+        </subtasks>
+      </task>
+      <task id="4" acs="4">
+        <title>Enable Automatic Failover Configuration</title>
+        <subtasks>
+          - Configure AI Gateway failover policy: route to fallback on primary failure
+          - Test failover scenarios: Primary rate limit (429 error), Primary timeout (>30s), Primary error (500/503)
+          - Verify fallback activates automatically
+          - Log which provider was used in test_events for debugging
+          - Document failover behavior in code
+        </subtasks>
+      </task>
+      <task id="5" acs="5">
+        <title>Enable Request Caching</title>
+        <subtasks>
+          - Configure AI Gateway caching: 15-minute TTL for identical prompts
+          - Test caching behavior: identical prompts return cached response
+          - Verify cache key includes: prompt + model + images hash
+          - Document cache behavior in helper function comments
+          - Test cache invalidation after 15 minutes
+        </subtasks>
+      </task>
+      <task id="6" acs="6">
+        <title>Enable Cost Tracking</title>
+        <subtasks>
+          - Configure AI Gateway to track costs per request
+          - Verify cost metadata available in gateway API responses
+          - Extract cost information from gateway responses
+          - Store cost per request in D1 database (add ai_costs table if needed, or use test_events metadata)
+          - Test cost tracking with multiple AI calls
+        </subtasks>
+      </task>
+      <task id="7" acs="7">
+        <title>Implement callAI() Helper Function</title>
+        <subtasks>
+          - Create src/shared/helpers/ai-gateway.ts with callAI() function
+          - Function signature: callAI(prompt: string, images?: ArrayBuffer[], modelPreference?: 'primary' | 'fallback'): Promise&lt;AIResponse&gt;
+          - Implement routing logic: Try Workers AI first (via env.AI binding), On failure, route to AI Gateway with fallback provider
+          - Handle image inputs (base64 encode for vision models)
+          - Implement error handling with user-friendly messages
+          - Return standardized response: { text: string, model: string, cost?: number, cached?: boolean }
+          - Log request to test_events table (if testRunId available)
+          - Add TypeScript types for AIResponse and model preferences
+        </subtasks>
+      </task>
+      <task id="8" acs="8">
+        <title>Implement getAICosts() Helper Function</title>
+        <subtasks>
+          - Create function in src/shared/helpers/ai-gateway.ts: getAICosts(testRunId: string): Promise&lt;number&gt;
+          - Query D1 database for all AI request events for test run
+          - Extract cost from test_events metadata or query separate ai_costs table
+          - Sum costs and return total
+          - Handle missing costs gracefully (return 0 if no data)
+          - Add unit tests for cost calculation
+        </subtasks>
+      </task>
+      <task id="9" acs="9">
+        <title>Implement AI Request Logging</title>
+        <subtasks>
+          - Extend insertTestEvent() to accept optional metadata (model, cost, tokens)
+          - Log AI request before calling AI provider: event_type: ai_request_start, description: "Calling ${model} with prompt (${promptLength} chars, ${imageCount} images)"
+          - Log AI response after receiving: event_type: ai_request_complete, description: "${model} responded (${tokenCount} tokens, $${cost})", Include model name, token usage, cost in metadata
+          - Log AI failures: event_type: ai_request_failed, description: "${model} failed: ${errorMessage}, trying fallback"
+          - Update TestEvent type to include optional metadata field (JSON string)
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">AI Gateway account and endpoint created: AI Gateway configured in Cloudflare dashboard with endpoint URL documented</criterion>
+    <criterion id="2">Primary provider configured: Workers AI (Llama Vision or Gemini Flash) set as primary for vision tasks via env.AI binding</criterion>
+    <criterion id="3">Fallback provider configured: OpenAI GPT-4o or Anthropic Claude 3.5 Sonnet configured for automatic failover through AI Gateway</criterion>
+    <criterion id="4">Automatic failover enabled: Gateway configured to route to fallback provider if primary fails (rate limits, errors, timeouts)</criterion>
+    <criterion id="5">Request caching enabled: 15-minute TTL for identical prompts to reduce costs and improve latency</criterion>
+    <criterion id="6">Cost tracking enabled: Gateway configured to track AI spend per test run with cost metadata available via API</criterion>
+    <criterion id="7">Helper function callAI() implemented: callAI(prompt, images, modelPreference) routes through gateway with proper error handling</criterion>
+    <criterion id="8">Helper function getAICosts() implemented: getAICosts(testRunId) returns total AI spend for test from D1 database</criterion>
+    <criterion id="9">AI request logging: All AI requests logged to test_events table with model used, prompt length, token usage, and cost</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics/epic-1-core-test-infrastructure.md</path>
+        <title>Epic 1: Core Test Infrastructure</title>
+        <section>Story 1.5: AI Gateway Configuration</section>
+        <snippet>Full story requirements including AI Gateway account creation, primary provider (Workers AI with Llama Vision or Gemini Flash), fallback provider (OpenAI GPT-4o or Anthropic Claude 3.5 Sonnet), automatic failover, request caching (15-minute TTL), cost tracking per test run, helper functions callAI() and getAICosts(), and AI request logging to test_events table. Gateway endpoint format: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/...</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records</title>
+        <section>ADR-004: AI Gateway as Primary Entry Point for All AI Requests</section>
+        <snippet>Decision: All AI requests (TestAgent decisions, evaluation) route through Cloudflare AI Gateway, not directly to AI providers. Rationale: Unified observability, cost tracking, automatic failover, caching (15-minute TTL), future-proof provider swapping. Affects Epic 1 (AI Gateway setup) and Epic 2 (TestAgent AI calls). MUST NOT call AI providers directly - all requests must route through gateway.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/technology-stack-details.md</path>
+        <title>Technology Stack Details</title>
+        <section>AI &amp; LLM</section>
+        <snippet>Cloudflare AI Gateway: Unified AI request router with primary (Workers AI - Llama Vision, Gemini Flash) and fallback (OpenAI GPT-4o, Anthropic Claude 3.5 Sonnet). Features: Caching (15-min TTL), cost tracking, automatic failover. All TestAgent AI calls routed through gateway. AI request flow: TestAgent → AI Gateway → [Workers AI | OpenAI | Anthropic] → Response, with caching and cost tracking.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd/4-functional-requirements.md</path>
+        <title>Functional Requirements</title>
+        <section>FR-2.5 Error Handling &amp; Agent Resilience</section>
+        <snippet>AI Model Fallback: AI Gateway automatically routes to backup model (frontier model if needed) if primary fails. This ensures reliability for TestAgent AI decisions and evaluation logic. Failover should handle rate limits, timeouts, and errors gracefully.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-2-d1-database-schema-and-migrations.md</path>
+        <title>Story 1.2: D1 Database Schema and Migrations</title>
+        <section>Dev Agent Record</section>
+        <snippet>Completed D1 helper functions: insertTestEvent() using DbResult&lt;T&gt; pattern. May need to extend insertTestEvent() to accept optional metadata field (JSON string) for AI request logging (model, cost, tokens). Established TypeScript strict mode patterns and helper function structure. REUSE these patterns for AI cost tracking and event logging.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-1-project-setup-and-cloudflare-configuration.md</path>
+        <title>Story 1.1: Project Setup and Cloudflare Configuration</title>
+        <section>Dev Agent Record</section>
+        <snippet>Infrastructure foundation completed: AI binding configured in wrangler.toml (binding = "AI", remote = true), project structure established. TypeScript strict mode enabled with auto-generated types in worker-configuration.d.ts. Modern Cloudflare Workers patterns established. AI binding is already configured - DO NOT modify binding configuration.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/shared/helpers/ai-gateway.ts</path>
+        <kind>helpers</kind>
+        <symbol>aiGatewayHelpers (placeholder)</symbol>
+        <lines>1-9</lines>
+        <reason>Target file for implementing callAI() and getAICosts() helper functions required by AC 7-8 and Tasks 7-8. Currently contains placeholder export. Must implement callAI(prompt, images, modelPreference) routing through Workers AI (primary) and AI Gateway (fallback), and getAICosts(testRunId) querying D1 database for cost totals.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/types.ts</path>
+        <kind>types</kind>
+        <symbol>TestEvent (may need extension for metadata)</symbol>
+        <lines>38-48</lines>
+        <reason>May need to extend TestEvent interface to include optional metadata field (JSON string) for AI request logging (model, cost, tokens). Currently has: id, test_run_id, phase, event_type, description, timestamp. Add metadata?: string for storing AI request metadata as JSON.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/d1.ts</path>
+        <kind>helpers</kind>
+        <symbol>insertTestEvent (may need extension for metadata)</symbol>
+        <lines>143-169</lines>
+        <reason>May need to extend insertTestEvent() to accept optional metadata parameter for AI request logging (Task 9). Currently signature: insertTestEvent(db, testRunId, phase, eventType, description). Add metadata?: string parameter and update SQL INSERT to include metadata column if provided.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/constants.ts</path>
+        <kind>constants</kind>
+        <symbol>EventType enum (may need extension for AI events)</symbol>
+        <lines>61-67</lines>
+        <reason>May need to extend EventType enum to include AI-specific event types: ai_request_start, ai_request_complete, ai_request_failed (Task 9). Currently has: STARTED, PROGRESS, COMPLETED, FAILED, CONTROL_DISCOVERED.</reason>
+      </artifact>
+      <artifact>
+        <path>wrangler.toml</path>
+        <kind>config</kind>
+        <symbol>AI binding (already configured)</symbol>
+        <lines>11-14</lines>
+        <reason>AI binding already configured (AC 2 partially satisfied). Binding name: AI, remote: true. Accessible via env.AI in Worker code. This is the Workers AI binding for primary provider. DO NOT modify binding configuration - already configured correctly. Verify Workers AI binding works with vision models.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <cloudflare-runtime>
+        <Ai>Workers AI binding for primary provider. Accessible via env.AI. Methods: env.AI.run(model, { prompt, image }) for vision models. Model names: @cf/meta/llama-3.2-11b-vision-instruct, @cf/google/gemini-2.0-flash-exp. Type auto-generated in worker-configuration.d.ts. Returns AI response with text, model, and metadata.</Ai>
+        <Request>Fetch API for AI Gateway HTTP requests. Use fetch() to call AI Gateway endpoints: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/openai or /anthropic. Include API keys from Workers secrets (AI_GATEWAY_OPENAI_API_KEY, AI_GATEWAY_ANTHROPIC_API_KEY) in Authorization header.</Request>
+      </cloudflare-runtime>
+      <external-apis>
+        <CloudflareAIGateway>AI Gateway API endpoint: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/openai (OpenAI-compatible) or /anthropic (Anthropic-compatible). Requires account_id and gateway_name from Cloudflare dashboard. Supports automatic failover, caching (15-min TTL), and cost tracking. Returns cost metadata in response headers or body.</CloudflareAIGateway>
+        <OpenAI>OpenAI API via AI Gateway (fallback provider). Endpoint: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/openai. Model: gpt-4o. Requires API key stored in Workers secrets (AI_GATEWAY_OPENAI_API_KEY). Use OpenAI-compatible request format (messages array with role and content).</OpenAI>
+        <Anthropic>Anthropic API via AI Gateway (fallback provider). Endpoint: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/anthropic. Model: claude-3-5-sonnet-20241022. Requires API key stored in Workers secrets (AI_GATEWAY_ANTHROPIC_API_KEY). Use Anthropic-compatible request format.</Anthropic>
+      </external-apis>
+      <devDependencies>
+        <typescript>latest (strict mode enabled, ESNext target)</typescript>
+        <wrangler>latest (Workers secrets management: wrangler secret put)</wrangler>
+        <types-node>^24.10.0</types-node>
+      </devDependencies>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-004: All AI requests MUST route through AI Gateway, not directly to providers. DO NOT call OpenAI or Anthropic APIs directly - route through AI Gateway endpoints. This ensures unified observability, cost tracking, and automatic failover.</constraint>
+    <constraint>TypeScript strict mode enabled - all AI helper functions must be fully typed with no implicit any types. Use AI response types from Workers AI binding and AI Gateway API responses.</constraint>
+    <constraint>DO NOT recreate AI binding - already configured in wrangler.toml (binding = "AI", remote = true). DO NOT modify wrangler.toml AI binding section.</constraint>
+    <constraint>Secrets management: Store API keys (AI_GATEWAY_OPENAI_API_KEY, AI_GATEWAY_ANTHROPIC_API_KEY) in Workers secrets using wrangler secret put, NOT in code or environment variables. Access via env.AI_GATEWAY_OPENAI_API_KEY and env.AI_GATEWAY_ANTHROPIC_API_KEY in Worker code.</constraint>
+    <constraint>REUSE DbResult&lt;T&gt; pattern from Story 1.2 for consistent error handling. AI helper functions should return DbResult types. Check success property before using data.</constraint>
+    <constraint>Primary provider: Workers AI via env.AI binding. Try Workers AI first for all requests. On failure (rate limit, timeout, error), automatically route to AI Gateway fallback provider (OpenAI or Anthropic). Log which provider was used in test_events for debugging.</constraint>
+    <constraint>Caching: AI Gateway handles caching automatically (15-min TTL for identical prompts). Cache key includes: prompt + model + images hash. Verify cache behavior: identical prompts return cached response. Document cache behavior in helper function comments.</constraint>
+    <constraint>Cost tracking: Extract cost information from AI Gateway API responses (metadata in headers or body). Store cost per request in D1 database (either in test_events metadata or separate ai_costs table). getAICosts() should sum all costs for a test run and return total.</constraint>
+    <constraint>Failover: Automatic routing to fallback if primary fails (rate limits, errors, timeouts). Test failover scenarios: Primary rate limit (429 error), Primary timeout (>30s), Primary error (500/503). Verify fallback activates automatically. Document failover behavior in code.</constraint>
+    <constraint>Image handling: Base64 encode images for vision models (Llama Vision, Gemini Flash, GPT-4o). Workers AI accepts ArrayBuffer directly, but AI Gateway may require base64 encoding. Handle both formats in callAI() function.</constraint>
+    <constraint>Error handling: All errors must be translated to user-friendly messages (no stack traces). Example: "AI Gateway request failed, trying fallback provider" instead of "TypeError: Cannot read property 'text' of undefined".</constraint>
+    <constraint>AI request logging: Log all AI requests to test_events table with model used, prompt length, token usage, and cost. Log before request (ai_request_start), after success (ai_request_complete), and after failure (ai_request_failed). Include metadata in test_events.description or separate metadata field.</constraint>
+    <constraint>Must pass tsc --noEmit with zero type errors before marking story complete. Test AI calls locally with wrangler dev before deploying. Verify Workers AI binding works, AI Gateway routing works, and cost tracking functions correctly.</constraint>
+    <constraint>Gateway endpoint format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/openai or /anthropic. Document account_id and gateway_name (from Cloudflare dashboard) in code comments or constants. DO NOT hardcode gateway endpoint - use environment variables or constants.</constraint>
+    <constraint>TestEvent metadata extension: If extending TestEvent type to include metadata field, ensure test_events table schema supports it (may need migration). Alternatively, store metadata as JSON string in description field. Choose approach based on D1 schema flexibility.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>Ai</name>
+      <kind>Cloudflare Workers runtime API (Workers AI binding)</kind>
+      <signature>
+interface Ai {
+  run(model: string, options: { prompt?: string; image?: ArrayBuffer | string }): Promise&lt;AiTextGenerationOutput&gt;;
+}
+
+interface AiTextGenerationOutput {
+  response: string;
+  model: string;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>callAI</name>
+      <kind>Helper function (to be implemented)</kind>
+      <signature>
+async function callAI(
+  env: Env,
+  prompt: string,
+  images?: ArrayBuffer[],
+  modelPreference?: 'primary' | 'fallback',
+  testRunId?: string
+): Promise&lt;DbResult&lt;AIResponse&gt;&gt;
+
+interface AIResponse {
+  text: string;
+  model: string;
+  cost?: number;
+  cached?: boolean;
+  tokens?: {
+    input?: number;
+    output?: number;
+  };
+}
+      </signature>
+      <path>src/shared/helpers/ai-gateway.ts</path>
+    </interface>
+    
+    <interface>
+      <name>getAICosts</name>
+      <kind>Helper function (to be implemented)</kind>
+      <signature>
+async function getAICosts(
+  db: D1Database,
+  testRunId: string
+): Promise&lt;DbResult&lt;number&gt;&gt;
+      </signature>
+      <path>src/shared/helpers/ai-gateway.ts</path>
+    </interface>
+    
+    <interface>
+      <name>AI Gateway OpenAI Endpoint</name>
+      <kind>HTTP REST API</kind>
+      <signature>
+POST https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/openai/chat/completions
+Headers:
+  Authorization: Bearer {AI_GATEWAY_OPENAI_API_KEY}
+  Content-Type: application/json
+Body:
+{
+  "model": "gpt-4o",
+  "messages": [
+    { "role": "user", "content": [{ "type": "text", "text": "prompt" }, { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }] }
+  ]
+}
+Response:
+{
+  "choices": [{ "message": { "content": "response text" } }],
+  "usage": { "prompt_tokens": number, "completion_tokens": number },
+  "cost": number
+}
+      </signature>
+      <path>External API (Cloudflare AI Gateway)</path>
+    </interface>
+    
+    <interface>
+      <name>AI Gateway Anthropic Endpoint</name>
+      <kind>HTTP REST API</kind>
+      <signature>
+POST https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/anthropic/v1/messages
+Headers:
+  Authorization: Bearer {AI_GATEWAY_ANTHROPIC_API_KEY}
+  Content-Type: application/json
+Body:
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 4096,
+  "messages": [{ "role": "user", "content": "prompt" }]
+}
+Response:
+{
+  "content": [{ "type": "text", "text": "response text" }],
+  "usage": { "input_tokens": number, "output_tokens": number }
+}
+      </signature>
+      <path>External API (Cloudflare AI Gateway)</path>
+    </interface>
+    
+    <interface>
+      <name>Env</name>
+      <kind>Cloudflare Workers Environment Bindings</kind>
+      <signature>
+interface Env {
+  DB: D1Database;  // gameeval-db binding
+  EVIDENCE_BUCKET: R2Bucket;  // gameeval-evidence binding
+  BROWSER: Fetcher;  // Browser Rendering binding
+  AI: Ai;  // Workers AI binding (primary provider)
+  WORKFLOW: Workflow;  // Workflow binding
+  TEST_AGENT: DurableObjectNamespace;  // TestAgent DO binding
+  AI_GATEWAY_OPENAI_API_KEY?: string;  // Workers secret
+  AI_GATEWAY_ANTHROPIC_API_KEY?: string;  // Workers secret
+  AI_GATEWAY_ACCOUNT_ID?: string;  // Workers secret (optional, can be hardcoded)
+  AI_GATEWAY_NAME?: string;  // Workers secret (optional, can be hardcoded)
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types, with manual additions for secrets)</path>
+    </interface>
+    
+    <interface>
+      <name>insertTestEvent</name>
+      <kind>D1 helper function (may need extension)</kind>
+      <signature>
+async function insertTestEvent(
+  db: D1Database,
+  testRunId: string,
+  phase: string,
+  eventType: string,
+  description: string,
+  metadata?: string  // Optional JSON string for AI request metadata
+): Promise&lt;DbResult&lt;void&gt;&gt;
+      </signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>TestEvent</name>
+      <kind>TypeScript interface (may need extension)</kind>
+      <signature>
+interface TestEvent {
+  id: number;
+  test_run_id: string;
+  phase: string;
+  event_type: string;
+  description: string;
+  timestamp: number;
+  metadata?: string;  // Optional JSON string for AI request metadata (model, cost, tokens)
+}
+      </signature>
+      <path>src/shared/types.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>TypeScript strict mode enforced - all code must pass tsc --noEmit with zero errors. Integration testing using wrangler dev locally before deploying. Test AI calls end-to-end with real Workers AI binding and AI Gateway. Test failover scenarios with simulated failures. Test cost tracking and event logging. Verify caching behavior (identical prompts return cached responses). Test error handling and user-friendly message formatting. Mock Workers AI binding and AI Gateway API calls for unit testing.</standards>
+    
+    <locations>
+      <location>Integration tests via wrangler dev with Workers AI binding and AI Gateway testing</location>
+      <location>Manual testing with real AI providers (Workers AI primary, OpenAI/Anthropic fallback)</location>
+      <location>D1 database verification: test_events logging with AI request metadata, cost tracking</location>
+    </locations>
+    
+    <ideas>
+      <idea ac="1">Test: Verify AI Gateway account created in Cloudflare dashboard. Test gateway endpoint URL format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/openai. Test gateway is accessible and ready for configuration. Document account_id and gateway_name in code comments or constants.</idea>
+      <idea ac="2">Test: Verify Workers AI binding (env.AI) works correctly. Test vision model calls: @cf/meta/llama-3.2-11b-vision-instruct, @cf/google/gemini-2.0-flash-exp. Test image inputs (ArrayBuffer) for screenshot analysis. Verify model supports vision tasks and returns text responses.</idea>
+      <idea ac="3">Test: Verify fallback providers configured via AI Gateway. Test OpenAI GPT-4o endpoint: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/openai. Test Anthropic Claude 3.5 Sonnet endpoint: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/anthropic. Verify API keys stored in Workers secrets (AI_GATEWAY_OPENAI_API_KEY, AI_GATEWAY_ANTHROPIC_API_KEY). Test manual fallback routing (simulate primary failure).</idea>
+      <idea ac="4">Test: Verify automatic failover enabled. Test failover scenarios: Primary rate limit (429 error) → fallback activates, Primary timeout (>30s) → fallback activates, Primary error (500/503) → fallback activates. Verify fallback provider used automatically. Test logging which provider was used in test_events for debugging.</idea>
+      <idea ac="5">Test: Verify request caching enabled (15-minute TTL). Test caching behavior: Send identical prompt twice → second request returns cached response. Verify cache key includes: prompt + model + images hash. Test cache invalidation after 15 minutes. Verify cached flag in AIResponse indicates cache hit.</idea>
+      <idea ac="6">Test: Verify cost tracking enabled. Test cost metadata available in AI Gateway API responses (headers or body). Test cost extraction from gateway responses. Test cost storage in D1 database (test_events metadata or separate ai_costs table). Test cost tracking with multiple AI calls (sum totals correctly).</idea>
+      <idea ac="7">Test: Verify callAI() helper function implemented. Test function signature: callAI(prompt, images?, modelPreference?, testRunId?). Test routing logic: Try Workers AI first (via env.AI binding), On failure, route to AI Gateway with fallback provider. Test image inputs (base64 encode for vision models). Test error handling with user-friendly messages. Test standardized response: { text, model, cost?, cached?, tokens? }. Test logging to test_events table (if testRunId available).</idea>
+      <idea ac="8">Test: Verify getAICosts() helper function implemented. Test function signature: getAICosts(testRunId). Test query D1 database for all AI request events for test run. Test cost extraction from test_events metadata or separate ai_costs table. Test sum costs and return total. Test handle missing costs gracefully (return 0 if no data). Test unit tests for cost calculation.</idea>
+      <idea ac="9">Test: Verify AI request logging implemented. Test extend insertTestEvent() to accept optional metadata (model, cost, tokens). Test log AI request before calling AI provider: event_type: ai_request_start, description includes model, prompt length, image count. Test log AI response after receiving: event_type: ai_request_complete, description includes model, token usage, cost, metadata includes full details. Test log AI failures: event_type: ai_request_failed, description includes model, error message, fallback attempt. Test TestEvent type includes optional metadata field (JSON string).</idea>
+      <idea ac="integration">Test: Verify end-to-end AI request flow. Test callAI() with Workers AI primary → success. Test callAI() with Workers AI primary failure → automatic fallback to AI Gateway (OpenAI/Anthropic). Test cost tracking across multiple AI calls in same test run. Test event logging for all AI requests (start, complete, failed). Verify getAICosts() returns correct total for test run.</idea>
+      <idea ac="integration">Test: Verify error handling and user-friendly messages. Test all errors translated to user-friendly messages (no stack traces). Test error messages: "AI Gateway request failed, trying fallback provider" instead of technical errors. Test graceful handling of missing API keys, invalid gateway endpoints, network failures.</idea>
+      <idea ac="integration">Test: Verify caching behavior end-to-end. Test identical prompts return cached responses (15-minute TTL). Test cache key includes prompt + model + images hash. Test cache invalidation after 15 minutes. Verify cached flag in AIResponse indicates cache hit.</idea>
+    </ideas>
+  </tests>
+</story-context>
+

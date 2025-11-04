@@ -1,0 +1,359 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.3</storyId>
+    <title>R2 Storage Setup and Helper Functions</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-04</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-3-r2-storage-setup-and-helper-functions.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>R2 bucket configured with helper functions for evidence storage</iWant>
+    <soThat>I can store screenshots and logs with proper organization</soThat>
+    <tasks>
+      <task id="1" acs="1,8">
+        <title>Create R2 Bucket and Configure Binding</title>
+        <subtasks>
+          - Create R2 bucket via Cloudflare dashboard or CLI: wrangler r2 bucket create gameeval-evidence
+          - Add R2 binding to wrangler.toml (verify already configured: binding = "EVIDENCE_BUCKET", bucket_name = "gameeval-evidence")
+          - Research R2 public access configuration (public URL vs CORS)
+          - Configure public read access for dashboard viewing (if using public URLs)
+          - Document bucket ID and access configuration in SETUP.md
+          - Test binding locally: wrangler dev and access env.EVIDENCE_BUCKET
+        </subtasks>
+      </task>
+      <task id="2" acs="2,3">
+        <title>Define Storage Path Patterns and Types</title>
+        <subtasks>
+          - Update src/shared/constants.ts with storage path templates: SCREENSHOT_PATH_TEMPLATE = "tests/{test_id}/screenshots/{timestamp}-{phase}-{action}.png", LOG_PATH_TEMPLATE = "tests/{test_id}/logs/{log_type}.log"
+          - Add LogType enum: 'console' | 'network' | 'agent-decisions'
+          - Reuse Phase enum from Story 1.2 (already defined in constants.ts)
+          - Update src/shared/types.ts with R2 artifact types: TestArtifact interface: { key: string, type: 'screenshot' | 'log', url: string, uploaded_at: number }, ScreenshotMetadata interface: { phase: string, action: string, timestamp: number }
+          - Export all types and constants
+        </subtasks>
+      </task>
+      <task id="3" acs="4,5,6,7">
+        <title>Implement R2 Helper Functions</title>
+        <subtasks>
+          - Update src/shared/helpers/r2.ts (replace placeholder)
+          - Implement uploadScreenshot(r2: R2Bucket, testId: string, phase: string, action: string, buffer: ArrayBuffer): Generate R2 key using storage path template with current timestamp, Set httpMetadata: { contentType: 'image/png' }, Upload buffer using r2.put(key, buffer, { httpMetadata }), Return DbResult&lt;string&gt; with R2 key on success
+          - Implement uploadLog(r2: R2Bucket, testId: string, logType: string, content: string): Generate R2 key for log file (no timestamp in path), Check if log file exists using r2.head(key), If exists, fetch existing content, append new content with newline, If not exists, create new log file with content, Set httpMetadata: { contentType: 'text/plain' }, Upload using r2.put(key, logContent, { httpMetadata }), Return DbResult&lt;string&gt; with R2 key on success
+          - Implement getTestArtifacts(r2: R2Bucket, testId: string): List all objects under tests/{testId}/ prefix using r2.list({ prefix }), Parse keys to extract metadata (screenshot timestamp/phase/action or log type), Generate public URLs for each artifact (use R2 public URL or pre-signed URL), Return DbResult&lt;TestArtifact[]&gt; with sorted list (screenshots by timestamp, logs alphabetically)
+          - Add proper TypeScript types for all function parameters and return values
+          - Reuse DbResult&lt;T&gt; pattern from Story 1.2 for consistent error handling
+          - Handle R2 errors gracefully (wrap in try/catch, return meaningful errors)
+          - Add JSDoc comments to all helper functions
+        </subtasks>
+      </task>
+      <task id="4" acs="8">
+        <title>Implement URL Generation for Public Access</title>
+        <subtasks>
+          - Research R2 public URL configuration options: Option A: R2.dev subdomain (public URLs enabled on bucket), Option B: Custom domain with CORS, Option C: Pre-signed URLs (temporary access)
+          - Choose approach based on MVP requirements (recommend R2.dev for simplicity)
+          - Implement getPublicUrl(bucketName: string, key: string) helper
+          - Test URL generation and verify images/logs accessible from browser
+          - Document URL generation strategy in code comments
+        </subtasks>
+      </task>
+      <task id="5">
+        <title>Path Generation Utility Functions</title>
+        <subtasks>
+          - Implement generateScreenshotPath(testId: string, phase: string, action: string, timestamp?: number): Use SCREENSHOT_PATH_TEMPLATE from constants, Default timestamp to Date.now() if not provided, Return complete R2 key path
+          - Implement generateLogPath(testId: string, logType: string): Use LOG_PATH_TEMPLATE from constants, Return complete R2 key path
+          - Add unit test examples (or test manually in Worker)
+        </subtasks>
+      </task>
+      <task id="6" acs="4,5,6,7">
+        <title>Integration Testing</title>
+        <subtasks>
+          - Create test endpoint in src/index.ts (e.g., GET /test-r2) - temporary for testing
+          - Test uploadScreenshot() - upload a PNG buffer (use sample image or programmatically generated PNG)
+          - Test uploadLog() - append multiple log entries, verify file appending works
+          - Test getTestArtifacts() - retrieve all artifacts for a test, verify URLs are accessible
+          - Verify Content-Type headers in R2 dashboard or via HTTP HEAD request
+          - Test public URL access - open screenshot URLs in browser, verify images load
+          - Test log file access - open log URLs in browser, verify text content displays
+          - Test error handling (invalid testId, R2 upload failures, missing bucket binding)
+        </subtasks>
+      </task>
+      <task id="7">
+        <title>Local and Remote Deployment</title>
+        <subtasks>
+          - Test locally with wrangler dev using local R2 bucket
+          - Verify bucket binding works: env.EVIDENCE_BUCKET.put(...)
+          - Deploy to production: wrangler deploy
+          - Test remote R2 bucket in production environment
+          - Verify remote public URLs work for dashboard access
+        </subtasks>
+      </task>
+      <task id="8">
+        <title>Documentation and Cleanup</title>
+        <subtasks>
+          - Document R2 bucket setup in SETUP.md (bucket creation, binding, public access)
+          - Add JSDoc comments with usage examples for all helper functions
+          - Remove any temporary test endpoints from src/index.ts
+          - Run tsc --noEmit to verify no type errors
+          - Run wrangler dev to verify local environment still works
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">R2 bucket created and bound to Workers - Bucket name: gameeval-evidence (configured in wrangler.toml)</criterion>
+    <criterion id="2">Storage path structure for screenshots: tests/{test_id}/screenshots/{timestamp}-{phase}-{action}.png</criterion>
+    <criterion id="3">Storage path structure for logs: tests/{test_id}/logs/{log_type}.log where log_type is console, network, or agent-decisions</criterion>
+    <criterion id="4">Helper function implemented: uploadScreenshot(r2: R2Bucket, testId: string, phase: string, action: string, buffer: ArrayBuffer) returns R2 object key</criterion>
+    <criterion id="5">Helper function implemented: uploadLog(r2: R2Bucket, testId: string, logType: string, content: string) appends to log file</criterion>
+    <criterion id="6">Helper function implemented: getTestArtifacts(r2: R2Bucket, testId: string) returns list of all artifacts with URLs</criterion>
+    <criterion id="7">Proper Content-Type headers set: image/png for screenshots, text/plain for logs</criterion>
+    <criterion id="8">R2 objects have public read access for dashboard viewing (configured via public URL or CORS)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics/epic-1-core-test-infrastructure.md</path>
+        <title>Epic 1: Core Test Infrastructure</title>
+        <section>Story 1.3: R2 Storage Setup and Helper Functions</section>
+        <snippet>Full story requirements including R2 bucket creation, storage path structures, helper functions for uploadScreenshot, uploadLog, and getTestArtifacts, Content-Type headers, and public access configuration. Specifies bucket name gameeval-evidence and integration with 4-phase test pipeline for evidence storage.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/data-architecture.md</path>
+        <title>Data Architecture</title>
+        <section>R2 Storage Structure</section>
+        <snippet>Complete R2 storage structure with organized paths: screenshots stored as tests/{test_id}/screenshots/{timestamp}-{phase}-{action}.png, logs stored as tests/{test_id}/logs/{log_type}.log (console, network, agent-decisions). Defines Content-Type headers (image/png for screenshots, text/plain for logs) and public read access for dashboard viewing. Includes 30-day retention policy (post-MVP).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/technology-stack-details.md</path>
+        <title>Technology Stack Details</title>
+        <section>Data Persistence - R2 Object Storage</section>
+        <snippet>R2 Object Storage for blob storage of artifacts. Screenshots and logs stored with organized path structure. Public read access for dashboard viewing. Zero egress fees. Global edge storage with fast access worldwide. S3-compatible API.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-2-d1-database-schema-and-migrations.md</path>
+        <title>Story 1.2: D1 Database Schema and Migrations</title>
+        <section>Dev Agent Record</section>
+        <snippet>Completed D1 helper functions using DbResult&lt;T&gt; pattern for consistent error handling. Established TypeScript strict mode patterns, JSDoc commenting standards, and helper function structure. Files created: src/shared/helpers/d1.ts, src/shared/types.ts (with DbResult type), src/shared/constants.ts (with Phase enum). Reuse these patterns for R2 helpers.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-1-project-setup-and-cloudflare-configuration.md</path>
+        <title>Story 1.1: Project Setup and Cloudflare Configuration</title>
+        <section>Dev Agent Record</section>
+        <snippet>Infrastructure foundation completed: R2 bucket binding configured in wrangler.toml (binding = "EVIDENCE_BUCKET", bucket_name = "gameeval-evidence"), src/shared/helpers/r2.ts placeholder created, project structure established. TypeScript strict mode enabled with auto-generated types in worker-configuration.d.ts. Modern Cloudflare Workers patterns established.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/shared/helpers/r2.ts</path>
+        <kind>helpers</kind>
+        <symbol>r2Helpers (placeholder)</symbol>
+        <lines>1-9</lines>
+        <reason>Target file for implementing all 3 R2 helper functions required by AC 4-6 and Task 3. Currently contains only placeholder object. Must replace with uploadScreenshot, uploadLog, and getTestArtifacts functions following DbResult pattern from Story 1.2.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/types.ts</path>
+        <kind>types</kind>
+        <symbol>DbResult&lt;T&gt; (already defined)</symbol>
+        <lines>50-55</lines>
+        <reason>Target file for adding R2 artifact types (TestArtifact, ScreenshotMetadata interfaces) required by AC 6 and Task 2. Currently contains DbResult type from Story 1.2 - REUSE this pattern for R2 helper functions. Add TestArtifact and ScreenshotMetadata interfaces.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/constants.ts</path>
+        <kind>constants</kind>
+        <symbol>Phase enum (already defined)</symbol>
+        <lines>52-58</lines>
+        <reason>Target file for adding storage path templates (SCREENSHOT_PATH_TEMPLATE, LOG_PATH_TEMPLATE) and LogType enum required by AC 2-3 and Task 2. Currently contains Phase enum from Story 1.2 - REUSE this enum. Add LogType enum and path template constants.</reason>
+      </artifact>
+      <artifact>
+        <path>wrangler.toml</path>
+        <kind>config</kind>
+        <symbol>r2_buckets binding</symbol>
+        <lines>22-24</lines>
+        <reason>R2 bucket binding configuration (AC 1 partially satisfied). Binding name: EVIDENCE_BUCKET, bucket_name: gameeval-evidence. Accessible via env.EVIDENCE_BUCKET in Workers runtime. Bucket may need to be created via CLI if not already created. DO NOT modify binding configuration - already correct.</reason>
+      </artifact>
+      <artifact>
+        <path>src/index.ts</path>
+        <kind>worker</kind>
+        <symbol>fetch handler</symbol>
+        <lines>16-38</lines>
+        <reason>Main Dashboard Worker entry point. May be used for temporary test endpoint during Task 6 integration testing (e.g., GET /test-r2). Currently returns health check at root endpoint and 404 for all other routes. Temporary test endpoints must be removed before story completion (Task 8).</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/d1.ts</path>
+        <kind>helpers</kind>
+        <symbol>D1 helper functions (completed in Story 1.2)</symbol>
+        <lines>1-265</lines>
+        <reason>Reference implementation for helper function patterns. Shows DbResult&lt;T&gt; error handling pattern, JSDoc commenting style, TypeScript strict mode compliance, async/await usage, and try/catch error handling. REUSE these patterns for R2 helper functions in r2.ts.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <cloudflare-runtime>
+        <R2Bucket>Built-in Workers API for R2 object storage. Type auto-generated in worker-configuration.d.ts via wrangler types command. No external package required. Access via env.EVIDENCE_BUCKET binding. Methods: put(key, data, options), get(key), head(key), list(options), delete(key).</R2Bucket>
+      </cloudflare-runtime>
+      <devDependencies>
+        <typescript>latest (strict mode enabled, ESNext target)</typescript>
+        <wrangler>latest (R2 CLI commands: r2 bucket create, r2 object put, r2 object get)</wrangler>
+        <types-node>^24.10.0</types-node>
+      </devDependencies>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>TypeScript strict mode enabled - all R2 operations must be fully typed with no implicit any types. Use R2Bucket type from auto-generated worker-configuration.d.ts.</constraint>
+    <constraint>DO NOT recreate R2 bucket binding - already configured in wrangler.toml (binding = "EVIDENCE_BUCKET", bucket_name = "gameeval-evidence"). Bucket may need to be created via CLI if not already created, but binding configuration is correct.</constraint>
+    <constraint>REUSE DbResult&lt;T&gt; pattern from Story 1.2 for consistent error handling across D1 and R2 helpers. All R2 helper functions must return DbResult&lt;string&gt; or DbResult&lt;TestArtifact[]&gt;.</constraint>
+    <constraint>REUSE Phase enum from Story 1.2 (already defined in constants.ts). DO NOT redefine Phase enum.</constraint>
+    <constraint>All timestamps must be stored as Unix epoch in milliseconds using Date.now() in JavaScript/TypeScript. Screenshot paths include timestamp for chronological sorting.</constraint>
+    <constraint>Log files are single R2 objects that are appended to (not multiple objects). Append operations require fetch-modify-put pattern: check existence with head(), fetch existing content, append new content, put updated content.</constraint>
+    <constraint>Helper functions must return DbResult type instead of throwing errors: type DbResult&lt;T&gt; = { success: true; data: T } | { success: false; error: string }. Wrap all R2 operations in try/catch blocks.</constraint>
+    <constraint>Use R2Bucket.put() with httpMetadata for Content-Type headers: { httpMetadata: { contentType: 'image/png' } } for screenshots, { httpMetadata: { contentType: 'text/plain' } } for logs.</constraint>
+    <constraint>Must pass tsc --noEmit with zero type errors before marking story complete. Test locally with wrangler dev before deploying.</constraint>
+    <constraint>Remove all temporary test endpoints from src/index.ts before completion (Task 8). Document R2 bucket setup in SETUP.md with JSDoc comments on all helper functions.</constraint>
+    <constraint>No external R2 packages required - R2 client is built into Workers runtime. Access R2 via env.EVIDENCE_BUCKET binding. Use R2Bucket.list({ prefix }) for test-scoped queries.</constraint>
+    <constraint>Public URL generation: MVP recommendation is R2.dev public URLs for simplicity. Format: https://&lt;bucket-id&gt;.r2.dev/&lt;key&gt;. Alternative: custom domain with CORS or pre-signed URLs (post-MVP).</constraint>
+    <constraint>Follow same code style and patterns from D1 helpers: JSDoc comments with usage examples, TypeScript strict mode, async/await (never raw Promises), meaningful error messages in DbResult errors.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>R2Bucket</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+interface R2Bucket {
+  put(key: string, value: ReadableStream | ArrayBuffer | ArrayBufferView | string | null, options?: R2PutOptions): Promise&lt;R2Object&gt;;
+  get(key: string, options?: R2GetOptions): Promise&lt;R2Object | null&gt;;
+  head(key: string): Promise&lt;R2Object | null&gt;;
+  list(options?: R2ListOptions): Promise&lt;R2Objects&gt;;
+  delete(keys: string | string[]): Promise&lt;void&gt;;
+}
+
+interface R2PutOptions {
+  httpMetadata?: {
+    contentType?: string;
+    contentEncoding?: string;
+    cacheControl?: string;
+  };
+  customMetadata?: Record&lt;string, string&gt;;
+}
+
+interface R2Object {
+  key: string;
+  size: number;
+  etag: string;
+  uploaded: Date;
+  httpMetadata?: {
+    contentType?: string;
+    contentEncoding?: string;
+    cacheControl?: string;
+  };
+  customMetadata?: Record&lt;string, string&gt;;
+}
+
+interface R2Objects {
+  objects: R2Object[];
+  truncated: boolean;
+  cursor?: string;
+}
+
+interface R2ListOptions {
+  prefix?: string;
+  delimiter?: string;
+  limit?: number;
+  cursor?: string;
+  include?: ('httpMetadata' | 'customMetadata')[];
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>Env</name>
+      <kind>Cloudflare Workers Environment Bindings</kind>
+      <signature>
+interface Env {
+  DB: D1Database;  // gameeval-db binding
+  EVIDENCE_BUCKET: R2Bucket;  // gameeval-evidence binding
+  BROWSER: Fetcher;
+  AI: Ai;
+  WORKFLOW: Workflow;
+  TEST_AGENT: DurableObjectNamespace;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>uploadScreenshot</name>
+      <kind>R2 helper function (to be implemented)</kind>
+      <signature>async function uploadScreenshot(r2: R2Bucket, testId: string, phase: string, action: string, buffer: ArrayBuffer): Promise&lt;DbResult&lt;string&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    
+    <interface>
+      <name>uploadLog</name>
+      <kind>R2 helper function (to be implemented)</kind>
+      <signature>async function uploadLog(r2: R2Bucket, testId: string, logType: string, content: string): Promise&lt;DbResult&lt;string&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    
+    <interface>
+      <name>getTestArtifacts</name>
+      <kind>R2 helper function (to be implemented)</kind>
+      <signature>async function getTestArtifacts(r2: R2Bucket, testId: string): Promise&lt;DbResult&lt;TestArtifact[]&gt;&gt;</signature>
+      <path>src/shared/helpers/r2.ts</path>
+    </interface>
+    
+    <interface>
+      <name>TestArtifact</name>
+      <kind>TypeScript interface (to be defined)</kind>
+      <signature>interface TestArtifact {
+  key: string;
+  type: 'screenshot' | 'log';
+  url: string;
+  uploaded_at: number;
+}</signature>
+      <path>src/shared/types.ts</path>
+    </interface>
+    
+    <interface>
+      <name>ScreenshotMetadata</name>
+      <kind>TypeScript interface (to be defined)</kind>
+      <signature>interface ScreenshotMetadata {
+  phase: string;
+  action: string;
+  timestamp: number;
+}</signature>
+      <path>src/shared/types.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>TypeScript strict mode enforced - all code must pass tsc --noEmit with zero errors. Integration testing using wrangler dev locally before deploying. Test R2 operations via temporary endpoints in src/index.ts (remove before completion). Verify Content-Type headers using R2 dashboard or HTTP HEAD requests. Test public URL access from external browser. Validate storage path structure matches expected patterns. Test log append functionality (fetch-modify-put pattern). All R2 operations must return properly typed DbResult results matching TypeScript interfaces. Test error handling with invalid testIds, missing bucket binding, and R2 upload failures.</standards>
+    
+    <locations>
+      <location>Integration tests via temporary endpoints in src/index.ts (Task 6)</location>
+      <location>Manual testing using wrangler dev and wrangler r2 commands</location>
+      <location>R2 dashboard for verifying object uploads and Content-Type headers</location>
+      <location>Browser testing for public URL access (screenshots and logs)</location>
+    </locations>
+    
+    <ideas>
+      <idea ac="1">Test: Verify R2 bucket binding accessible in Worker via env.EVIDENCE_BUCKET. Test bucket creation with wrangler r2 bucket create gameeval-evidence if not already created. Verify binding in wrangler.toml matches bucket name.</idea>
+      <idea ac="2">Test: Upload screenshot with uploadScreenshot(), verify object created at path tests/{test_id}/screenshots/{timestamp}-{phase}-{action}.png. Parse path to verify timestamp, phase, and action are correctly formatted.</idea>
+      <idea ac="3">Test: Upload logs with uploadLog() for all three log types (console, network, agent-decisions), verify objects created at paths tests/{test_id}/logs/{log_type}.log. Verify log file appending works (append multiple entries to same log file).</idea>
+      <idea ac="4">Test: Call uploadScreenshot() with PNG buffer, verify function returns DbResult&lt;string&gt; with R2 key. Verify screenshot accessible via R2 dashboard and public URL. Test error handling with invalid testId or buffer.</idea>
+      <idea ac="5">Test: Call uploadLog() to append multiple log entries to same log file, verify file appending works correctly (fetch existing, append newline + content, put updated). Verify log file accessible via R2 dashboard and public URL.</idea>
+      <idea ac="6">Test: Call getTestArtifacts() for a test with multiple screenshots and logs, verify function returns DbResult&lt;TestArtifact[]&gt; with sorted list (screenshots by timestamp DESC, logs alphabetically). Verify all artifacts have valid public URLs.</idea>
+      <idea ac="7">Test: Upload screenshot and verify Content-Type header is image/png using HTTP HEAD request or R2 dashboard. Upload log and verify Content-Type header is text/plain. Verify headers are set in httpMetadata during put() operations.</idea>
+      <idea ac="8">Test: Configure R2 bucket for public access (R2.dev subdomain recommended for MVP). Generate public URLs for screenshots and logs, verify URLs accessible from external browser. Test images load correctly and log files display as text.</idea>
+      <idea ac="integration">Test: Upload screenshot, then append log entries, then call getTestArtifacts() to retrieve all artifacts. Verify all operations work together correctly. Test error scenarios: invalid testId format, R2 bucket not bound, upload failures.</idea>
+      <idea ac="integration">Test: Verify storage path structure matches architecture: tests/{test_id}/screenshots/ for screenshots, tests/{test_id}/logs/ for logs. Verify path generation utility functions (generateScreenshotPath, generateLogPath) work correctly.</idea>
+      <idea ac="deployment">Test: Run wrangler dev locally, test R2 operations with local bucket. Deploy to production with wrangler deploy, test remote R2 bucket. Verify public URLs work from external browser after deployment.</idea>
+    </ideas>
+  </tests>
+</story-context>
+

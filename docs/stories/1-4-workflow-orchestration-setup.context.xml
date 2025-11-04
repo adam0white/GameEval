@@ -1,0 +1,398 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.4</storyId>
+    <title>Workflow Orchestration Setup</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-04</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-4-workflow-orchestration-setup.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a Cloudflare Workflow that orchestrates the 4-phase test pipeline</iWant>
+    <soThat>I can coordinate TestAgent execution with retries and timeouts</soThat>
+    <tasks>
+      <task id="1" acs="1,2">
+        <title>Set Up Workflow Entry Point and Input Types</title>
+        <subtasks>
+          - Update src/workflows/GameTestPipeline.ts to extend WorkflowEntrypoint from cloudflare:workers
+          - Define workflow input interface: GameTestPipelineInput { testRunId: string (UUID), gameUrl: string, inputSchema?: string (optional JSON string) }
+          - Update run() method signature to accept WorkflowEvent&lt;GameTestPipelineInput&gt; and WorkflowStep
+          - Extract input parameters from event: const { testRunId, gameUrl, inputSchema } = event.payload
+          - Add input validation (check testRunId format, gameUrl is valid URL)
+          - Return error if validation fails (user-friendly message)
+        </subtasks>
+      </task>
+      <task id="2" acs="3,4">
+        <title>Implement Step 1 - Launch TestAgent DO</title>
+        <subtasks>
+          - Create workflow step: launchAgentStep using step.waitUntil() or step.do()
+          - Generate TestAgent DO ID from testRunId: env.TEST_AGENT.idFromString(testRunId)
+          - Get TestAgent DO instance: env.TEST_AGENT.get(testAgentId)
+          - Call TestAgent initialization endpoint: await testAgent.fetch('/init', { method: 'POST', body: JSON.stringify({ gameUrl, inputSchema }) })
+          - Update D1 status to 'running': Call updateTestStatus(db, testRunId, 'running')
+          - Log event: Call insertTestEvent(db, testRunId, 'workflow', 'started', 'Test workflow initiated')
+          - Handle errors: Catch and return user-friendly error message
+          - Note: TestAgent DO will be implemented in Epic 2, so this step may need to handle "not implemented" gracefully for now
+        </subtasks>
+      </task>
+      <task id="3" acs="4,5,9,10">
+        <title>Implement Step 2 - Phase 1: Load &amp; Validation</title>
+        <subtasks>
+          - Create workflow step: phase1Step using step.do() with timeout
+          - Set timeout: 30 seconds (30000ms)
+          - Log phase start: insertTestEvent(db, testRunId, 'phase1', 'started', 'Phase 1: Load &amp; Validation started')
+          - Call TestAgent phase1 endpoint: await testAgent.fetch('/phase1', { method: 'POST' })
+          - Handle timeout: Workflow automatically handles timeout, but catch and log user-friendly message
+          - On success: Log insertTestEvent(db, testRunId, 'phase1', 'completed', 'Phase 1: Load &amp; Validation completed')
+          - On failure: Log error event with user-friendly description
+          - Configure retry: 2 retries with exponential backoff (Workflow's built-in retry)
+          - Return phase result or error
+        </subtasks>
+      </task>
+      <task id="4" acs="4,6,9,10">
+        <title>Implement Step 3 - Phase 2: Control Discovery</title>
+        <subtasks>
+          - Create workflow step: phase2Step using step.do() with timeout
+          - Set timeout: 45 seconds (45000ms)
+          - Log phase start: insertTestEvent(db, testRunId, 'phase2', 'started', 'Phase 2: Control Discovery started')
+          - Call TestAgent phase2 endpoint: await testAgent.fetch('/phase2', { method: 'POST' })
+          - Handle timeout: Catch and log user-friendly message
+          - On success: Log completion event
+          - On failure: Log error event with user-friendly description
+          - Configure retry: 2 retries with exponential backoff
+          - Return phase result or error
+        </subtasks>
+      </task>
+      <task id="5" acs="4,7,9,10">
+        <title>Implement Step 4 - Phase 3: Gameplay Exploration</title>
+        <subtasks>
+          - Create workflow step: phase3Step using step.do() with timeout
+          - Set timeout: 5 minutes (300000ms) - adaptive timeout as specified
+          - Log phase start: insertTestEvent(db, testRunId, 'phase3', 'started', 'Phase 3: Gameplay Exploration started')
+          - Call TestAgent phase3 endpoint: await testAgent.fetch('/phase3', { method: 'POST' })
+          - Handle timeout: Catch and log user-friendly message
+          - On success: Log completion event
+          - On failure: Log error event with user-friendly description
+          - Configure retry: 2 retries with exponential backoff
+          - Return phase result or error
+          - Note: Phase 3 is longest phase, may need special handling for partial success scenarios
+        </subtasks>
+      </task>
+      <task id="6" acs="4,8,9,10">
+        <title>Implement Step 5 - Phase 4: Evaluation &amp; Scoring</title>
+        <subtasks>
+          - Create workflow step: phase4Step using step.do() with timeout
+          - Set timeout: 60 seconds (60000ms)
+          - Log phase start: insertTestEvent(db, testRunId, 'phase4', 'started', 'Phase 4: Evaluation &amp; Scoring started')
+          - Call TestAgent phase4 endpoint: await testAgent.fetch('/phase4', { method: 'POST' })
+          - Handle timeout: Catch and log user-friendly message
+          - On success: Log completion event
+          - On failure: Log error event with user-friendly description
+          - Configure retry: 2 retries with exponential backoff
+          - Return phase result or error
+        </subtasks>
+      </task>
+      <task id="7" acs="9,10,12">
+        <title>Implement Error Handling and Final Status Updates</title>
+        <subtasks>
+          - Wrap entire workflow in try/catch block
+          - On any phase failure after retries exhausted: Update D1 status: updateTestStatus(db, testRunId, 'failed'), Log error event: insertTestEvent(db, testRunId, 'workflow', 'failed', userFriendlyErrorMessage), Return error response (no stack traces, user-friendly message only)
+          - On successful completion of all phases: Update D1 status: updateTestStatus(db, testRunId, 'completed'), Log completion event: insertTestEvent(db, testRunId, 'workflow', 'completed', 'Test workflow completed successfully'), Return success response with summary
+          - Create helper function: formatUserFriendlyError(error: Error): string to translate technical errors
+          - Ensure maximum workflow duration: 6 minutes end-to-end (enforced by Workflow runtime)
+          - Handle partial failures: If Phase 1-2 fail, still attempt Phase 4 with partial evidence (graceful degradation)
+        </subtasks>
+      </task>
+      <task id="8" acs="11">
+        <title>Configure Workflow Retry Logic and Environment Access</title>
+        <subtasks>
+          - Research Cloudflare Workflows retry configuration: Use Workflow's built-in retry mechanism (no custom implementation needed), Configure exponential backoff: 2 retries per phase, Verify retry behavior: Workflows automatically retry failed steps
+          - Access environment bindings: Workflow can access env from WorkflowEntrypoint context
+          - Verify bindings available: env.DB (D1 database), env.TEST_AGENT (Durable Object binding)
+          - Import D1 helper functions: import { updateTestStatus, insertTestEvent } from '../shared/helpers/d1'
+          - Test workflow locally: Use wrangler dev with workflow testing
+          - Document workflow execution patterns in code comments
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Workflow file created: src/workflows/GameTestPipeline.ts implements full workflow logic</criterion>
+    <criterion id="2">Workflow accepts inputs: testRunId (UUID), gameUrl (string), inputSchema (optional JSON)</criterion>
+    <criterion id="3">Workflow has 5 steps: Launch Agent, Phase 1, Phase 2, Phase 3, Phase 4</criterion>
+    <criterion id="4">Each phase step calls TestAgent DO method with appropriate timeout using Workflow's step API</criterion>
+    <criterion id="5">Phase 1 timeout: 30 seconds</criterion>
+    <criterion id="6">Phase 2 timeout: 45 seconds</criterion>
+    <criterion id="7">Phase 3 timeout: 5 minutes (adaptive)</criterion>
+    <criterion id="8">Phase 4 timeout: 60 seconds</criterion>
+    <criterion id="9">Workflow updates test_runs.status in D1 at each phase transition (queued → running → completed/failed)</criterion>
+    <criterion id="10">Workflow logs events to test_events table for phase starts, completions, and errors</criterion>
+    <criterion id="11">Automatic retry logic: 2 retries per phase with exponential backoff (using Workflow's built-in retry)</criterion>
+    <criterion id="12">Workflow catches errors and marks test as 'failed' with user-friendly error message in D1 (no stack traces)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics/epic-1-core-test-infrastructure.md</path>
+        <title>Epic 1: Core Test Infrastructure</title>
+        <section>Story 1.4: Workflow Orchestration Setup</section>
+        <snippet>Full story requirements including workflow file creation, 5-step structure (Launch Agent + 4 phases), timeout specifications per phase (30s, 45s, 5min, 60s), D1 status updates, event logging, retry logic with 2 retries and exponential backoff, and error handling with user-friendly messages. Maximum workflow duration: 6 minutes end-to-end. TestAgent DO ID = test run UUID (1:1 mapping).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/novel-pattern-designs.md</path>
+        <title>Novel Pattern Designs</title>
+        <section>Pattern 3: Workflow-Orchestrated Multi-Phase Testing with Error Recovery</section>
+        <snippet>Complete workflow structure example with 5 steps, timeout enforcement using withTimeout(), TestAgent DO communication via fetch(), error handling strategy with workflow auto-retry and TestAgent adaptive strategies, graceful degradation (continue with partial data), and user-friendly error messages. Shows step.do() pattern for workflow steps with automatic retry.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/technology-stack-details.md</path>
+        <title>Technology Stack Details</title>
+        <section>Orchestration Layer</section>
+        <snippet>Cloudflare Workflows durable execution engine with GameTestPipeline workflow: 5 steps (Launch Agent + 4 phases), automatic state persistence and retry logic, maximum duration: 6 minutes end-to-end, timeout enforcement per phase. Integration points show RPC service bindings for Workflow → TestAgent DO communication.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/architecture-decision-records-adrs.md</path>
+        <title>Architecture Decision Records</title>
+        <section>ADR-003: Workflow Auto-Retry with TestAgent Error Awareness</section>
+        <snippet>Decision: Cloudflare Workflows handle automatic retry with exponential backoff, but TestAgent receives error context to try adaptive strategies on retry attempts. Leverages Workflows' built-in retry mechanism (no custom implementation needed). TestAgent can adapt behavior based on previous failure. Graceful degradation: continue with partial data if retries exhausted. User-friendly error messages: all technical errors translated.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd/4-functional-requirements.md</path>
+        <title>Functional Requirements</title>
+        <section>FR-2.5 Error Handling &amp; Agent Resilience</section>
+        <snippet>Agent retry logic: If agent fails a phase, workflow retries with same agent instance (state preserved in Durable Object). Alternative strategies on repeated failures. User interaction detection. Timeout recovery. Graceful degradation: If Phase 1-2 fail, skip to evaluation with partial evidence. Fail-safe error messages: All failures MUST return helpful, actionable error messages to users (no stack traces). Maximum test duration: 6 minutes end-to-end (workflow enforces timeout).</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-2-d1-database-schema-and-migrations.md</path>
+        <title>Story 1.2: D1 Database Schema and Migrations</title>
+        <section>Dev Agent Record</section>
+        <snippet>Completed D1 helper functions: updateTestStatus(db, id, status) and insertTestEvent(db, testRunId, phase, eventType, description) using DbResult&lt;T&gt; pattern for consistent error handling. Established TypeScript strict mode patterns, JSDoc commenting standards, and helper function structure. Files: src/shared/helpers/d1.ts, src/shared/types.ts (with DbResult type), src/shared/constants.ts (with Phase enum). REUSE these patterns for workflow D1 updates.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-1-project-setup-and-cloudflare-configuration.md</path>
+        <title>Story 1.1: Project Setup and Cloudflare Configuration</title>
+        <section>Dev Agent Record</section>
+        <snippet>Infrastructure foundation completed: Workflow binding configured in wrangler.toml (binding = "WORKFLOW", name = "game-test-pipeline", class_name = "GameTestPipeline"), TestAgent DO binding configured (TEST_AGENT), src/workflows/GameTestPipeline.ts skeleton created, project structure established. TypeScript strict mode enabled with auto-generated types in worker-configuration.d.ts. Modern Cloudflare Workers patterns established.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/workflows/GameTestPipeline.ts</path>
+        <kind>workflow</kind>
+        <symbol>GameTestPipeline (skeleton)</symbol>
+        <lines>1-21</lines>
+        <reason>Target file for implementing full workflow logic required by AC 1-12 and Tasks 1-8. Currently contains skeleton extending WorkflowEntrypoint with placeholder run() method returning 'not_implemented'. Must replace with complete 5-step workflow implementation (Launch Agent + 4 phases) with timeouts, retries, D1 updates, and error handling.</reason>
+      </artifact>
+      <artifact>
+        <path>src/agents/TestAgent.ts</path>
+        <kind>durable-object</kind>
+        <symbol>TestAgent (skeleton)</symbol>
+        <lines>1-22</lines>
+        <reason>Reference implementation for TestAgent DO that workflow will call. Currently skeleton returning 501 Not Implemented. Workflow will call /init, /phase1, /phase2, /phase3, /phase4 endpoints. Note: TestAgent DO will be implemented in Epic 2, so workflow may need to handle "not implemented" gracefully for now (Task 2).</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/helpers/d1.ts</path>
+        <kind>helpers</kind>
+        <symbol>updateTestStatus, insertTestEvent (completed in Story 1.2)</symbol>
+        <lines>107-132, 143-169</lines>
+        <reason>REUSE these D1 helper functions for workflow status updates and event logging. updateTestStatus(db, id, status) updates test_runs.status and timestamps. insertTestEvent(db, testRunId, phase, eventType, description) logs events to test_events table. Both return DbResult&lt;T&gt; for consistent error handling. Import from '../shared/helpers/d1' in workflow file.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/types.ts</path>
+        <kind>types</kind>
+        <symbol>DbResult&lt;T&gt; (already defined)</symbol>
+        <lines>50-55</lines>
+        <reason>REUSE DbResult&lt;T&gt; type for consistent error handling. D1 helper functions return DbResult types. Workflow may need to add workflow-specific input types (GameTestPipelineInput interface) in this file or inline in workflow file.</reason>
+      </artifact>
+      <artifact>
+        <path>src/shared/constants.ts</path>
+        <kind>constants</kind>
+        <symbol>Phase enum, TestStatus enum (already defined)</symbol>
+        <lines>52-58, 34-40</lines>
+        <reason>REUSE Phase enum (PHASE1, PHASE2, PHASE3, PHASE4) and TestStatus enum (QUEUED, RUNNING, COMPLETED, FAILED) for workflow phase transitions and status updates. Import from '../shared/constants' in workflow file.</reason>
+      </artifact>
+      <artifact>
+        <path>wrangler.toml</path>
+        <kind>config</kind>
+        <symbol>workflows binding, durable_objects binding</symbol>
+        <lines>31-34, 37-40</lines>
+        <reason>Workflow binding configuration (AC 1 partially satisfied). Binding name: WORKFLOW, workflow name: game-test-pipeline, class_name: GameTestPipeline. TestAgent DO binding: TEST_AGENT. Accessible via env.WORKFLOW and env.TEST_AGENT in WorkflowEntrypoint context. DO NOT modify binding configuration - already configured correctly.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <cloudflare-runtime>
+        <WorkflowEntrypoint>Built-in Workers API for Cloudflare Workflows. Extends WorkflowEntrypoint class from 'cloudflare:workers' package. Provides durable execution with automatic state persistence. Maximum duration: 6 minutes. Type auto-generated in worker-configuration.d.ts via wrangler types command.</WorkflowEntrypoint>
+        <WorkflowStep>Workflow step API for creating durable steps. Methods: step.do(), step.waitUntil(), step.sleep(). Each step is automatically persisted and retried on failure. Built-in retry mechanism with exponential backoff. Type auto-generated in worker-configuration.d.ts.</WorkflowStep>
+        <WorkflowEvent>Event payload passed to workflow run() method. Contains payload property with workflow input data. Type auto-generated in worker-configuration.d.ts.</WorkflowEvent>
+        <DurableObjectNamespace>Built-in Workers API for accessing Durable Objects. Methods: idFromString(id), get(id) returns DurableObjectStub. TestAgent DO accessible via env.TEST_AGENT binding. Type auto-generated in worker-configuration.d.ts.</DurableObjectNamespace>
+      </cloudflare-runtime>
+      <devDependencies>
+        <typescript>latest (strict mode enabled, ESNext target)</typescript>
+        <wrangler>latest (Workflow testing and deployment)</wrangler>
+        <types-node>^24.10.0</types-node>
+      </devDependencies>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>TypeScript strict mode enabled - all workflow operations must be fully typed with no implicit any types. Use WorkflowEntrypoint, WorkflowStep, WorkflowEvent types from auto-generated worker-configuration.d.ts via 'cloudflare:workers' package.</constraint>
+    <constraint>DO NOT recreate Workflow binding - already configured in wrangler.toml (binding = "WORKFLOW", name = "game-test-pipeline", class_name = "GameTestPipeline"). DO NOT modify wrangler.toml workflow or durable_objects binding sections.</constraint>
+    <constraint>Maximum workflow duration: 6 minutes end-to-end (enforced by Cloudflare Workflows runtime). Workflow must complete all 5 steps within this limit. Total phase timeouts: 30s + 45s + 5min + 60s = ~7min, but workflow may need to account for overhead and retries.</constraint>
+    <constraint>REUSE DbResult&lt;T&gt; pattern from Story 1.2 for consistent error handling. D1 helper functions (updateTestStatus, insertTestEvent) return DbResult types. Check success property before using data.</constraint>
+    <constraint>REUSE Phase enum and TestStatus enum from Story 1.2 (already defined in constants.ts). DO NOT redefine these enums. Import from '../shared/constants'.</constraint>
+    <constraint>All errors must be translated to user-friendly messages (no stack traces). Create formatUserFriendlyError(error: Error): string helper function (Task 7). Example: "TestAgent failed to load game" instead of "TypeError: Cannot read property 'fetch' of undefined".</constraint>
+    <constraint>Use Workflow's built-in retry mechanism (no custom retry implementation needed). Configure 2 retries per phase with exponential backoff. Workflows automatically retry failed steps. TestAgent receives error context for adaptive strategies (ADR-003).</constraint>
+    <constraint>TestAgent DO ID = test run UUID (1:1 mapping). Generate DO ID using env.TEST_AGENT.idFromString(testRunId). Get DO instance using env.TEST_AGENT.get(testAgentId). TestAgent DO will be implemented in Epic 2, so workflow may need to handle "not implemented" gracefully for now (Task 2).</constraint>
+    <constraint>Workflow steps must be idempotent by design - safe to retry. Use step.do() for phase execution. Each step is automatically persisted and retried on failure. Steps are durable across workflow restarts.</constraint>
+    <constraint>Access environment bindings from WorkflowEntrypoint context: env.DB (D1 database), env.TEST_AGENT (Durable Object binding). Env type auto-generated in worker-configuration.d.ts. Import D1 helpers: import { updateTestStatus, insertTestEvent } from '../shared/helpers/d1'.</constraint>
+    <constraint>Timeout enforcement per phase: Phase 1 (30s), Phase 2 (45s), Phase 3 (5min adaptive), Phase 4 (60s). Use step.do() with timeout option or wrap TestAgent.fetch() calls with timeout handling. Workflow automatically handles timeouts, but catch and log user-friendly messages.</constraint>
+    <constraint>Graceful degradation: If Phase 1-2 fail after retries exhausted, still attempt Phase 4 with partial evidence (Task 7). Update D1 status to 'failed' but log what was accomplished. User-friendly error message: "Test failed during control discovery, but partial evaluation completed."</constraint>
+    <constraint>Must pass tsc --noEmit with zero type errors before marking story complete. Test workflow locally with wrangler dev before deploying. Workflow execution patterns documented in code comments.</constraint>
+    <constraint>No external workflow packages required - Cloudflare Workflows API is built into Workers runtime. Access via 'cloudflare:workers' package imports. Use WorkflowEntrypoint class, WorkflowStep API, and WorkflowEvent types.</constraint>
+    <constraint>Workflow file must be exported as default export or named export matching class_name in wrangler.toml (GameTestPipeline). Current skeleton extends WorkflowEntrypoint and exports class. Verify export matches binding configuration.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>WorkflowEntrypoint</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+class WorkflowEntrypoint {
+  async run(event: WorkflowEvent&lt;T&gt;, step: WorkflowStep, env: Env): Promise&lt;any&gt;;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types, from 'cloudflare:workers' package)</path>
+    </interface>
+    
+    <interface>
+      <name>WorkflowStep</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+interface WorkflowStep {
+  do&lt;T&gt;(fn: () => Promise&lt;T&gt;, options?: { timeout?: number }): Promise&lt;T&gt;;
+  waitUntil&lt;T&gt;(promise: Promise&lt;T&gt;): void;
+  sleep(ms: number): Promise&lt;void&gt;;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types, from 'cloudflare:workers' package)</path>
+    </interface>
+    
+    <interface>
+      <name>WorkflowEvent</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+interface WorkflowEvent&lt;T&gt; {
+  payload: T;
+  context?: any;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types, from 'cloudflare:workers' package)</path>
+    </interface>
+    
+    <interface>
+      <name>DurableObjectNamespace</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+interface DurableObjectNamespace {
+  idFromString(id: string): DurableObjectId;
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): DurableObjectStub;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>DurableObjectStub</name>
+      <kind>Cloudflare Workers runtime API</kind>
+      <signature>
+interface DurableObjectStub {
+  fetch(request: Request | string, init?: RequestInit): Promise&lt;Response&gt;;
+  id: DurableObjectId;
+  name?: string;
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>Env</name>
+      <kind>Cloudflare Workers Environment Bindings</kind>
+      <signature>
+interface Env {
+  DB: D1Database;  // gameeval-db binding
+  EVIDENCE_BUCKET: R2Bucket;  // gameeval-evidence binding
+  BROWSER: Fetcher;  // Browser Rendering binding
+  AI: Ai;  // AI Gateway binding
+  WORKFLOW: Workflow;  // Workflow binding (for creating workflows)
+  TEST_AGENT: DurableObjectNamespace;  // TestAgent DO binding
+}
+      </signature>
+      <path>worker-configuration.d.ts (auto-generated via wrangler types)</path>
+    </interface>
+    
+    <interface>
+      <name>GameTestPipelineInput</name>
+      <kind>TypeScript interface (to be defined)</kind>
+      <signature>interface GameTestPipelineInput {
+  testRunId: string;  // UUID
+  gameUrl: string;
+  inputSchema?: string;  // Optional JSON string
+}</signature>
+      <path>src/workflows/GameTestPipeline.ts (inline) or src/shared/types.ts</path>
+    </interface>
+    
+    <interface>
+      <name>updateTestStatus</name>
+      <kind>D1 helper function (completed in Story 1.2)</kind>
+      <signature>async function updateTestStatus(db: D1Database, id: string, status: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>insertTestEvent</name>
+      <kind>D1 helper function (completed in Story 1.2)</kind>
+      <signature>async function insertTestEvent(db: D1Database, testRunId: string, phase: string, eventType: string, description: string): Promise&lt;DbResult&lt;void&gt;&gt;</signature>
+      <path>src/shared/helpers/d1.ts</path>
+    </interface>
+    
+    <interface>
+      <name>formatUserFriendlyError</name>
+      <kind>Helper function (to be implemented)</kind>
+      <signature>function formatUserFriendlyError(error: Error): string</signature>
+      <path>src/workflows/GameTestPipeline.ts (inline helper)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>TypeScript strict mode enforced - all code must pass tsc --noEmit with zero errors. Integration testing using wrangler dev locally before deploying. Test workflow execution end-to-end with real D1 database and TestAgent DO skeleton. Test retry logic with simulated failures. Test status updates and event logging. Verify maximum duration enforcement (6 minutes). Test timeout handling for each phase. Test error handling and user-friendly message formatting. Mock D1 database calls and TestAgent DO calls for unit testing.</standards>
+    
+    <locations>
+      <location>Integration tests via wrangler dev with workflow testing</location>
+      <location>Manual testing with TestAgent DO skeleton (will be implemented in Epic 2)</location>
+      <location>D1 database verification: test_runs.status transitions, test_events logging</location>
+    </locations>
+    
+    <ideas>
+      <idea ac="1,2">Test: Verify GameTestPipeline workflow file extends WorkflowEntrypoint correctly. Test workflow accepts inputs: testRunId (UUID format), gameUrl (valid URL), inputSchema (optional JSON string). Test input validation rejects invalid testRunId format or invalid URLs.</idea>
+      <idea ac="3,4">Test: Verify workflow has 5 steps (Launch Agent, Phase 1, Phase 2, Phase 3, Phase 4). Test each step calls TestAgent DO method using step.do() with appropriate timeout. Test step.do() automatically persists and retries on failure.</idea>
+      <idea ac="5">Test: Verify Phase 1 timeout is 30 seconds. Test timeout handling - workflow should catch timeout and log user-friendly message. Test retry logic: 2 retries with exponential backoff.</idea>
+      <idea ac="6">Test: Verify Phase 2 timeout is 45 seconds. Test timeout handling and retry logic similar to Phase 1.</idea>
+      <idea ac="7">Test: Verify Phase 3 timeout is 5 minutes (adaptive). Test timeout handling for longest phase. Verify special handling for partial success scenarios if needed.</idea>
+      <idea ac="8">Test: Verify Phase 4 timeout is 60 seconds. Test timeout handling and retry logic similar to Phase 1-2.</idea>
+      <idea ac="9">Test: Verify workflow updates test_runs.status in D1 at each phase transition: queued → running (at Launch Agent), running → completed/failed (at workflow end). Test status updates using updateTestStatus() helper function. Verify updated_at and completed_at timestamps are set correctly.</idea>
+      <idea ac="10">Test: Verify workflow logs events to test_events table for phase starts, completions, and errors. Test insertTestEvent() calls for: workflow 'started', phase1 'started'/'completed'/'failed', phase2 'started'/'completed'/'failed', phase3 'started'/'completed'/'failed', phase4 'started'/'completed'/'failed', workflow 'completed'/'failed'. Verify all events have correct test_run_id, phase, event_type, description, and timestamp.</idea>
+      <idea ac="11">Test: Verify automatic retry logic: 2 retries per phase with exponential backoff. Test Workflow's built-in retry mechanism (no custom implementation needed). Test retry behavior: Workflows automatically retry failed steps. Verify TestAgent receives error context for adaptive strategies (ADR-003).</idea>
+      <idea ac="12">Test: Verify workflow catches errors and marks test as 'failed' with user-friendly error message in D1 (no stack traces). Test formatUserFriendlyError() helper function translates technical errors to actionable messages. Test error handling: invalid testRunId, TestAgent DO not found, phase timeout, phase failure after retries exhausted. Verify D1 status updated to 'failed' with user-friendly error message.</idea>
+      <idea ac="integration">Test: Verify graceful degradation: If Phase 1-2 fail after retries exhausted, still attempt Phase 4 with partial evidence. Test partial failure scenario: Phase 1 fails, Phase 2 fails, Phase 4 succeeds with partial evidence. Verify D1 status updated to 'failed' but log what was accomplished. Verify user-friendly error message: "Test failed during control discovery, but partial evaluation completed."</idea>
+      <idea ac="integration">Test: Verify maximum workflow duration: 6 minutes end-to-end. Test workflow completes all 5 steps within 6-minute limit. Test workflow timeout enforcement if phases exceed total time limit.</idea>
+      <idea ac="integration">Test: Verify workflow execution with TestAgent DO skeleton (returns 501 Not Implemented). Test workflow handles "not implemented" gracefully for now. Test workflow updates D1 status and logs events even when TestAgent DO not fully implemented.</idea>
+    </ideas>
+  </tests>
+</story-context>
+
