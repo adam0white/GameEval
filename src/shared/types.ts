@@ -219,6 +219,20 @@ export interface Phase2Result {
 }
 
 /**
+ * Phase 3 specific result structure (Story 2.5)
+ */
+export interface Phase3Result {
+  /** Whether Phase 3 succeeded */
+  success: boolean;
+  /** Number of screenshots captured during gameplay */
+  screenshotCount: number;
+  /** Error messages encountered during gameplay */
+  errors: string[];
+  /** Number of actions taken by the agent */
+  actionsTaken: number;
+}
+
+/**
  * Browser session handle stored in DO state
  */
 export interface BrowserSessionHandle {
