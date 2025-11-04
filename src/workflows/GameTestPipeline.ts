@@ -258,7 +258,7 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
       const response = await testAgent.fetch('http://testAgent/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameUrl, inputSchema }),
+        body: JSON.stringify({ testRunId, gameUrl, inputSchema }),
       });
 
       if (!response.ok && response.status !== 501) {

@@ -154,3 +154,47 @@ export interface AIResponse {
   metadata?: AIMetadata;
 }
 
+// TestAgent Durable Object types (Story 2.1)
+
+/**
+ * Metadata for evidence stored in R2
+ */
+export interface EvidenceMetadata {
+  /** Evidence type (screenshot or log) */
+  type: 'screenshot' | 'log';
+  /** Public R2 URL for accessing the evidence */
+  url: string;
+  /** Timestamp when evidence was stored (Unix epoch in milliseconds) */
+  timestamp: number;
+  /** Optional description of the evidence */
+  description?: string;
+}
+
+/**
+ * Result from a phase execution
+ */
+export interface PhaseResult {
+  /** Whether the phase succeeded */
+  success: boolean;
+  /** Optional message describing the result */
+  message?: string;
+  /** Optional data returned from the phase */
+  data?: Record<string, unknown>;
+}
+
+/**
+ * TestAgent Durable Object state structure
+ */
+export interface TestAgentState {
+  /** Test run UUID */
+  testRunId: string;
+  /** URL of the game being tested */
+  gameUrl: string;
+  /** Optional JSON schema for test guidance */
+  inputSchema?: string;
+  /** Evidence collected during test execution */
+  evidence: EvidenceMetadata[];
+  /** Results from each phase */
+  phaseResults: Record<string, PhaseResult>;
+}
+
