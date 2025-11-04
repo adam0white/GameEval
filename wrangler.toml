@@ -1,0 +1,43 @@
+name = "gameeval-qa-pipeline"
+main = "src/index.ts"
+compatibility_date = "2025-11-04"
+compatibility_flags = ["nodejs_compat", "enable_ctx_exports"]
+account_id = "a20259cba74e506296745f9c67c1f3bc"
+
+# AI Gateway binding
+[ai]
+binding = "AI"
+remote = true
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "gameeval-db"
+database_id = "59b4298a-451e-4d40-ba24-82861f7f8721"
+
+# R2 Bucket binding
+[[r2_buckets]]
+binding = "EVIDENCE_BUCKET"
+bucket_name = "gameeval-evidence"
+
+# Browser Rendering binding
+[browser]
+binding = "BROWSER"
+
+# Workflows binding for orchestrating test pipelines
+[[workflows]]
+binding = "WORKFLOW"
+name = "game-test-pipeline"
+class_name = "GameTestPipeline"
+
+# Durable Objects binding
+[[durable_objects.bindings]]
+name = "TEST_AGENT"
+class_name = "TestAgent"
+script_name = "gameeval-qa-pipeline"
+
+# Durable Objects migrations
+[[migrations]]
+tag = "v1"
+new_classes = ["TestAgent"]
+
