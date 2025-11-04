@@ -8,11 +8,16 @@
     "deploy": "wrangler deploy",
     "lint": "tsc --noEmit",
     "types": "wrangler types",
-    "test": "wrangler dev --test-scheduled --local"
+    "test": "echo 'To run integration tests: Start wrangler dev in one terminal, then run: curl http://localhost:8787/test' && echo 'To test scheduled workers: npm run test:scheduled'",
+    "test:manual": "echo '1. Run: npm run dev' && echo '2. In another terminal: curl http://localhost:8787/test'",
+    "test:scheduled": "wrangler dev --test-scheduled --local"
   },
   "dependencies": {
-    "@browserbasehq/stagehand": "^3.0.1",
-    "@cloudflare/puppeteer": "latest"
+    "@browserbasehq/stagehand": "^2.5.0",
+    "@cloudflare/playwright": "^1.0.0",
+    "@cloudflare/puppeteer": "latest",
+    "zod": "3.25.67",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

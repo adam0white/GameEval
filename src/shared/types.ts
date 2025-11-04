@@ -183,6 +183,42 @@ export interface PhaseResult {
 }
 
 /**
+ * Phase 1 specific result structure (Story 2.3)
+ */
+export interface Phase1Result {
+  /** Whether Phase 1 succeeded */
+  success: boolean;
+  /** Whether game requires user interaction to start */
+  requiresInteraction: boolean;
+  /** Error messages if any validation failed */
+  errors: string[];
+}
+
+/**
+ * Control map for discovered interactive elements (Story 2.4)
+ */
+export type ControlMap = {
+  [selector: string]: {
+    /** Type of control interaction */
+    type: 'click' | 'keyboard' | 'drag' | 'hover';
+    /** Human-readable description of the control */
+    description: string;
+  };
+};
+
+/**
+ * Phase 2 specific result structure (Story 2.4)
+ */
+export interface Phase2Result {
+  /** Whether Phase 2 succeeded */
+  success: boolean;
+  /** Map of discovered interactive controls */
+  controls: ControlMap;
+  /** Control hypothesis describing discovered controls */
+  hypothesis: string;
+}
+
+/**
  * Browser session handle stored in DO state
  */
 export interface BrowserSessionHandle {

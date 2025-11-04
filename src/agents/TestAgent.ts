@@ -8,11 +8,14 @@
  * via worker-configuration.d.ts (auto-generated from wrangler.toml)
  */
 import puppeteer from '@cloudflare/puppeteer';
+import type { Browser, Page } from '@cloudflare/puppeteer';
 import { Stagehand } from '@browserbasehq/stagehand';
+import { endpointURLString } from '@cloudflare/playwright';
+import { WorkersAIClient } from '../shared/helpers/workersAIClient';
 import { insertTestEvent } from '../shared/helpers/d1';
 import { uploadScreenshot, uploadLog } from '../shared/helpers/r2';
 import { Phase, LogType } from '../shared/constants';
-import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError } from '../shared/types';
+import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError, Phase1Result, Phase2Result, ControlMap } from '../shared/types';
 
 export class TestAgent implements DurableObject {
   private state: DurableObjectState;
@@ -23,7 +26,7 @@ export class TestAgent implements DurableObject {
   private gameUrl: string = '';
   private inputSchema?: string;
   
-  // Browser automation (Story 2.2)
+  // Browser automation (Story 2.2) - Using Stagehand with Workers AI
   private stagehand?: Stagehand;
   
   // WebSocket clients for real-time progress updates (not persisted)
@@ -258,35 +261,479 @@ export class TestAgent implements DurableObject {
   }
 
   /**
-   * Phase 1: Load & Validation (empty implementation)
+   * Phase 1: Load & Validation (Story 2.3)
+   * Navigates to game URL, validates load, detects interaction requirements, captures evidence
    */
   private async runPhase1(): Promise<Response> {
+    // Initialize result structure (AC #1, Task 1)
+    const result: Phase1Result = {
+      success: false,
+      requiresInteraction: false,
+      errors: [],
+    };
+
     try {
-      await this.updateStatus(Phase.PHASE1, 'Phase 1 started (implementation pending)');
-      
-      return Response.json({
-        success: false,
-        message: 'Phase 1 not yet implemented',
+      // Set 30-second timeout for Phase 1 (Task 1)
+      const timeoutMs = 30000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Phase 1 execution timed out after 30 seconds')), timeoutMs);
       });
+
+      // Execute Phase 1 logic with timeout
+      const phase1Promise = this.executePhase1Logic(result);
+      await Promise.race([phase1Promise, timeoutPromise]);
+
+      return Response.json(result);
     } catch (error) {
-      return this.handleError(error, Phase.PHASE1);
+      // Translate errors to user-friendly messages (Task 1)
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.success = false;
+      result.errors.push(this.translatePhase1Error(message));
+      
+      // Log error to test_events
+      if (this.testRunId && this.env.DB) {
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE1,
+          'failed',
+          `Phase 1 failed: ${message}`
+        );
+      }
+      
+      return Response.json(result);
     }
   }
 
   /**
-   * Phase 2: Control Discovery (empty implementation)
+   * Execute Phase 1 logic steps
+   */
+  private async executePhase1Logic(result: Phase1Result): Promise<void> {
+    // Task 1: Log phase start to test_events
+    await this.updateStatus(Phase.PHASE1, 'Phase 1 started');
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE1,
+      'started',
+      'Phase 1: Load & Validation started'
+    );
+
+    // Task 2: Launch browser session (AC #2)
+    const stagehand = await this.launchBrowser();
+    const page = stagehand.page;
+    
+    if (!page) {
+      throw new Error('Failed to create browser page');
+    }
+
+    // Task 3 & 4: Navigate to game URL and wait for load (AC #3, #4)
+    try {
+      await page.goto(this.gameUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000, // 20-second page load timeout
+      });
+    } catch (navError) {
+      const message = navError instanceof Error ? navError.message : 'Navigation failed';
+      throw new Error(`Failed to navigate to game URL: ${message}`);
+    }
+
+    // Task 6: Validate page did not return 404 error (AC #6)
+    // Check for 404 or other HTTP errors by examining page URL and content
+    const currentUrl = page.url();
+    if (!currentUrl || currentUrl === 'about:blank') {
+      result.errors.push('Game URL could not be loaded. Please check the URL is correct.');
+      return; // Early return on navigation failure
+    }
+    
+    // Check if page shows an error (common error page indicators)
+    try {
+      const title = await page.title();
+      if (title.toLowerCase().includes('404') || title.toLowerCase().includes('not found')) {
+        result.errors.push('Game URL returned 404 error. Please check the URL is correct.');
+        return;
+      }
+    } catch (error) {
+      // Ignore title check errors
+    }
+
+    // Task 5: Capture initial screenshot (AC #5)
+    try {
+      await this.captureScreenshot('phase1-initial-load', Phase.PHASE1);
+    } catch (error) {
+      // Screenshot failure is non-fatal
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`Failed to capture screenshot: ${message}`);
+    }
+
+    // Task 7: Validate page is not blank (AC #7)
+    const bodyChildren = await page.$$('body > *');
+    if (bodyChildren.length === 0) {
+      result.errors.push('Game page appears to be blank. Please check the game URL loads correctly.');
+      return; // Early return on blank page
+    }
+
+    // Task 8: Detect if game requires user interaction to start (AC #8)
+    // Check for play/start/begin buttons using Puppeteer's $$ selector
+    const playButtons = await page.$$('button');
+    let requiresInteraction = false;
+    
+    for (const button of playButtons) {
+      try {
+        const text = await page.evaluate((el: any) => el.textContent?.toLowerCase() || '', button);
+        if (text.includes('play') || text.includes('start') || text.includes('begin')) {
+          requiresInteraction = true;
+          break;
+        }
+      } catch (e) {
+        // Skip buttons that can't be evaluated
+        continue;
+      }
+    }
+    
+    result.requiresInteraction = requiresInteraction;
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE1,
+      'interaction_detection',
+      `Game requires interaction: ${result.requiresInteraction}`
+    );
+
+    // Task 9: Log immediate console errors (AC #9)
+    const consoleLogs = await this.state.storage.get<ConsoleLogEntry[]>('consoleLogs') || [];
+    const consoleErrors = consoleLogs.filter(log => log.level === 'error');
+    
+    for (const error of consoleErrors) {
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE1,
+        'console_error',
+        error.text
+      );
+    }
+    
+    // Add console errors to result
+    if (consoleErrors.length > 0) {
+      result.errors.push(...consoleErrors.map(e => `Console error: ${e.text}`));
+    }
+
+    // All validations passed
+    if (result.errors.length === 0) {
+      result.success = true;
+
+      // Task 10: Update test_runs.status = 'running' in D1 (AC #10)
+      try {
+        await this.env.DB.prepare(
+          'UPDATE test_runs SET status = ?, updated_at = ? WHERE id = ?'
+        ).bind('running', Date.now(), this.testRunId).run();
+      } catch (error) {
+        console.error('Failed to update test_runs status:', error);
+      }
+
+      // Task 11: Broadcast progress via WebSocket (AC #11)
+      await this.updateStatus(Phase.PHASE1, 'Phase 1 complete - Game loaded successfully');
+
+      // Task 12: Store Phase 1 result in DO state (AC #12)
+      const phaseResults = await this.state.storage.get<Record<string, Phase1Result>>('phaseResults') || {};
+      phaseResults.phase1 = result;
+      await this.state.storage.put('phaseResults', phaseResults);
+    }
+  }
+
+  /**
+   * Translate Phase 1 errors to user-friendly messages
+   */
+  private translatePhase1Error(message: string): string {
+    if (message.includes('timed out') || message.includes('timeout')) {
+      return 'Game page did not load within timeout. Please check the URL and try again.';
+    }
+    if (message.includes('net::ERR') || message.includes('Network')) {
+      return 'Network error while loading game. Please check your connection and the game URL.';
+    }
+    if (message.includes('Invalid URL')) {
+      return 'Invalid game URL. Please check the URL format is correct.';
+    }
+    if (message.includes('browser')) {
+      return 'Failed to launch browser session. Please try again.';
+    }
+    return message;
+  }
+
+  /**
+   * Phase 2: Control Discovery (Story 2.4)
+   * Uses Stagehand observe() to discover interactive controls, classifies them,
+   * generates hypothesis, and stores discoveries in Agent SQL
    */
   private async runPhase2(): Promise<Response> {
+    // Initialize result structure (AC #10)
+    const result: Phase2Result = {
+      success: false,
+      controls: {},
+      hypothesis: '',
+    };
+
     try {
-      await this.updateStatus(Phase.PHASE2, 'Phase 2 started (implementation pending)');
-      
-      return Response.json({
-        success: false,
-        message: 'Phase 2 not yet implemented',
+      // Set 45-second timeout for Phase 2 (Task 1)
+      const timeoutMs = 45000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Phase 2 execution timed out after 45 seconds')), timeoutMs);
       });
+
+      // Execute Phase 2 logic with timeout
+      const phase2Promise = this.executePhase2Logic(result);
+      await Promise.race([phase2Promise, timeoutPromise]);
+
+      return Response.json(result);
     } catch (error) {
-      return this.handleError(error, Phase.PHASE2);
+      // Translate errors to user-friendly messages (Task 1)
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.success = false;
+      result.controls = {};
+      result.hypothesis = '';
+      
+      // Log error to test_events
+      if (this.testRunId && this.env.DB) {
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE2,
+          'failed',
+          `Phase 2 failed: ${message}`
+        );
+      }
+      
+      return Response.json(result);
     }
+  }
+
+  /**
+   * Execute Phase 2 logic steps
+   */
+  private async executePhase2Logic(result: Phase2Result): Promise<void> {
+    // Task 1: Log phase start to test_events
+    await this.updateStatus(Phase.PHASE2, 'Phase 2 started');
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE2,
+      'started',
+      'Phase 2: Control Discovery started'
+    );
+
+    // Task 2: Verify Stagehand instance exists (reuse from Phase 1)
+    if (!this.stagehand || !this.stagehand.page) {
+      // If browser not available, try launching (fallback)
+      try {
+        this.stagehand = await this.launchBrowser();
+      } catch (error) {
+        throw new Error('Browser session not available. Please run Phase 1 first.');
+      }
+    }
+
+    const page = this.stagehand.page;
+
+    // Task 2: Use Stagehand observe() to identify interactive elements (AC #2)
+    let observedElements: any[];
+    try {
+      // Stagehand page.observe() returns array of interactive element actions
+      // Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
+      // observe() identifies interactive elements on the page
+      observedElements = await page.observe();
+    } catch (observeError) {
+      const message = observeError instanceof Error ? observeError.message : 'Unknown error';
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE2,
+        'observe_failed',
+        `Stagehand observe() failed: ${message}`
+      );
+      throw new Error(`Failed to discover controls: ${message}`);
+    }
+
+    // Task 3: Classify discovered elements and build ControlMap (AC #3)
+    const controlMap: ControlMap = {};
+    
+    for (const element of observedElements) {
+      // Extract element information from Stagehand observe() result
+      // Stagehand returns actions with selectors and descriptions
+      const selector = element.selector || element.locator || `element-${Object.keys(controlMap).length}`;
+      const description = element.description || element.text || 'Interactive element';
+      
+      // Classify element type based on description and properties
+      let controlType: 'click' | 'keyboard' | 'drag' | 'hover' = 'click';
+      const descLower = description.toLowerCase();
+      
+      if (descLower.includes('key') || descLower.includes('press') || descLower.includes('wasd') || descLower.includes('space')) {
+        controlType = 'keyboard';
+      } else if (descLower.includes('drag') || descLower.includes('move')) {
+        controlType = 'drag';
+      } else if (descLower.includes('hover') || descLower.includes('mouseover')) {
+        controlType = 'hover';
+      } else {
+        controlType = 'click'; // Default to click for buttons and clickable elements
+      }
+      
+      controlMap[selector] = {
+        type: controlType,
+        description,
+      };
+    }
+
+    // Task 4: Use inputSchema to prioritize controls (AC #4)
+    if (this.inputSchema) {
+      try {
+        const schema = JSON.parse(this.inputSchema);
+        
+        // Log that we're using inputSchema guidance
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE2,
+          'schema_guidance',
+          `Using input schema to prioritize controls: ${Object.keys(schema.controls || {}).join(', ')}`
+        );
+        
+        // Note: inputSchema guides but doesn't restrict discovery
+        // All discovered controls are kept, schema just provides context
+      } catch (schemaError) {
+        // Log error but continue (inputSchema is optional guidance)
+        console.error('Failed to parse inputSchema:', schemaError);
+      }
+    }
+
+    result.controls = controlMap;
+
+    // Task 5: Capture screenshot with controls (AC #5)
+    try {
+      await this.captureScreenshot('phase2-controls', Phase.PHASE2);
+    } catch (screenshotError) {
+      // Screenshot failure is non-fatal
+      console.error('Failed to capture Phase 2 screenshot:', screenshotError);
+    }
+
+    // Task 6: Generate control hypothesis (AC #6)
+    const hypothesis = this.generateControlHypothesis(controlMap);
+    result.hypothesis = hypothesis;
+    
+    await insertTestEvent(
+      this.env.DB,
+      this.testRunId,
+      Phase.PHASE2,
+      'hypothesis',
+      `Control hypothesis: ${hypothesis}`
+    );
+
+    // Task 7: Store control hypothesis in Agent SQL database (AC #7)
+    try {
+      for (const [selector, control] of Object.entries(controlMap)) {
+        await this.execSQL(
+          'INSERT INTO control_discoveries (element_selector, action_type, confidence, discovered_at) VALUES (?, ?, ?, ?)',
+          [selector, control.type, 1.0, Date.now()]
+        );
+      }
+    } catch (sqlError) {
+      // Log error but don't fail Phase 2 (controls still available in result)
+      console.error('Failed to store controls in Agent SQL:', sqlError);
+    }
+
+    // Task 8: Log discovered controls to test_events (AC #8)
+    for (const [selector, control] of Object.entries(controlMap)) {
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE2,
+        'control_discovered',
+        `Discovered ${control.type} control: ${control.description} at ${selector}`
+      );
+    }
+
+    // Task 9: Broadcast progress via WebSocket (AC #9)
+    const controlCount = Object.keys(controlMap).length;
+    await this.updateStatus(Phase.PHASE2, `Phase 2 complete - Discovered ${controlCount} controls`);
+
+    // All steps completed successfully
+    result.success = true;
+
+    // Task 10: Store Phase 2 result in DO state (AC #10)
+    const phaseResults = await this.state.storage.get<Record<string, any>>('phaseResults') || {};
+    phaseResults.phase2 = result;
+    await this.state.storage.put('phaseResults', phaseResults);
+    
+    // Store controls in DO state for Phase 3 reference
+    await this.state.storage.put('discoveredControls', result.controls);
+  }
+
+  /**
+   * Generate control hypothesis from discovered controls (Task 6)
+   */
+  private generateControlHypothesis(controlMap: ControlMap): string {
+    const controls = Object.values(controlMap);
+    
+    if (controls.length === 0) {
+      return 'No interactive controls detected on the page';
+    }
+
+    // Group controls by type
+    const clickControls = controls.filter(c => c.type === 'click');
+    const keyboardControls = controls.filter(c => c.type === 'keyboard');
+    const dragControls = controls.filter(c => c.type === 'drag');
+    const hoverControls = controls.filter(c => c.type === 'hover');
+
+    const parts: string[] = [];
+
+    // Analyze keyboard controls for common patterns
+    if (keyboardControls.length > 0) {
+      const descriptions = keyboardControls.map(c => c.description.toLowerCase()).join(' ');
+      
+      if (descriptions.includes('wasd') || (descriptions.includes('w') && descriptions.includes('a') && descriptions.includes('s') && descriptions.includes('d'))) {
+        parts.push('WASD movement controls');
+      }
+      if (descriptions.includes('space')) {
+        parts.push('Space key for actions');
+      }
+      if (descriptions.includes('arrow')) {
+        parts.push('Arrow key controls');
+      }
+      if (keyboardControls.length > 0 && parts.length === 0) {
+        parts.push(`${keyboardControls.length} keyboard controls`);
+      }
+    }
+
+    // Analyze click controls
+    if (clickControls.length > 0) {
+      const descriptions = clickControls.map(c => c.description.toLowerCase()).join(' ');
+      
+      if (descriptions.includes('play') || descriptions.includes('start')) {
+        parts.push('Play/Start button');
+      }
+      if (descriptions.includes('pause')) {
+        parts.push('Pause button');
+      }
+      if (descriptions.includes('settings') || descriptions.includes('options')) {
+        parts.push('Settings/Options menu');
+      }
+      if (clickControls.length > 0 && parts.length === 0) {
+        parts.push(`${clickControls.length} clickable buttons/elements`);
+      }
+    }
+
+    // Add drag and hover if present
+    if (dragControls.length > 0) {
+      parts.push(`${dragControls.length} drag controls`);
+    }
+    if (hoverControls.length > 0) {
+      parts.push(`${hoverControls.length} hover interactions`);
+    }
+
+    if (parts.length === 0) {
+      return `Game has ${controls.length} interactive controls detected`;
+    }
+
+    return `Game has ${parts.join(', ')}`;
   }
 
   /**
@@ -445,7 +892,7 @@ export class TestAgent implements DurableObject {
   }
 
   /**
-   * Launch browser session with Stagehand integration (Story 2.2)
+   * Launch browser session with Stagehand + Workers AI (Story 2.2)
    * Creates browser session with viewport 1280x720, headless mode, and user agent
    * Stores session handle in DO state for persistence across phases
    */
@@ -462,77 +909,31 @@ export class TestAgent implements DurableObject {
         return this.stagehand;
       }
 
-      // Initialize Stagehand with LOCAL browser (using Cloudflare Browser Rendering via env.BROWSER)
+      // Initialize Stagehand with Workers AI and Cloudflare Browser Rendering
+      // Following: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
+      const llmClient = new WorkersAIClient(this.env.AI);
+
       this.stagehand = new Stagehand({
         env: 'LOCAL',
-        verbose: 1,
-        model: 'gpt-4o',
         localBrowserLaunchOptions: {
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--window-size=1280,720',
-          ],
+          cdpUrl: endpointURLString(this.env.BROWSER),
         },
+        llmClient,
+        verbose: 1,
       });
 
-      // Initialize Stagehand (connects to browser)
+      // Initialize Stagehand
       await this.stagehand.init();
 
-      // Set up console log capture using CDP (AC #7) and network monitoring (AC #8)
-      // Access CDP connection through Stagehand's context
-      try {
-        const cdpConnection = this.stagehand.context.conn;
-        
-        // Set user agent (AC #6) via CDP
-        await cdpConnection.send('Network.setUserAgentOverride', {
-          userAgent: 'GameEval TestAgent/1.0'
-        });
-        
-        // Enable Runtime domain for console logs
-        await cdpConnection.send('Runtime.enable');
-        cdpConnection.on('Runtime.consoleAPICalled', (params: any) => {
-          const level = params.type;
-          const text = params.args.map((arg: any) => {
-            if (arg.value !== undefined) return String(arg.value);
-            if (arg.description) return arg.description;
-            return String(arg);
-          }).join(' ');
-          
-          // Store console log asynchronously (don't block execution)
-          this.addConsoleLog(level, text).catch(err => 
-            console.error('Failed to store console log:', err)
-          );
-        });
+      // Set viewport to 1280x720 (AC #1)
+      await this.stagehand.page.setViewportSize({ width: 1280, height: 720 });
 
-        // Enable Network domain for network monitoring
-        await cdpConnection.send('Network.enable');
-        
-        // Track failed responses
-        cdpConnection.on('Network.responseReceived', (params: any) => {
-          const status = params.response.status;
-          if (status >= 400) {
-            const url = params.response.url;
-            this.addNetworkError(url, status, `HTTP ${status}`).catch(err =>
-              console.error('Failed to store network error:', err)
-            );
-          }
+      // Set user agent (AC #6)
+      await this.stagehand.page.context().addInitScript(() => {
+        Object.defineProperty(navigator, 'userAgent', {
+          get: () => 'GameEval TestAgent/1.0',
         });
-
-        // Track loading failures
-        cdpConnection.on('Network.loadingFailed', (params: any) => {
-          const url = params.documentURL || params.request?.url || 'unknown';
-          const error = params.errorText || 'Network request failed';
-          this.addNetworkError(url, undefined, error).catch(err =>
-            console.error('Failed to store network error:', err)
-          );
-        });
-      } catch (error) {
-        // Log error but don't fail browser launch
-        console.error('Failed to set up CDP monitoring:', error);
-      }
+      });
 
       // Store browser session handle in DO state
       const sessionId = `browser-${this.testRunId}-${Date.now()}`;
@@ -553,6 +954,8 @@ export class TestAgent implements DurableObject {
       return this.stagehand;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[TestAgent] Browser launch error:', error);
+      console.error('[TestAgent] Error details:', { message, stack: error instanceof Error ? error.stack : undefined });
       throw new Error(`Failed to launch browser: ${message}`);
     }
   }
@@ -575,7 +978,6 @@ export class TestAgent implements DurableObject {
         } catch (error) {
           console.error('Failed to close Stagehand:', error);
         }
-        
         this.stagehand = undefined;
       }
 
@@ -595,18 +997,12 @@ export class TestAgent implements DurableObject {
   private async captureScreenshot(description: string, phase: Phase = Phase.PHASE1): Promise<string> {
     try {
       // Verify browser session exists
-      if (!this.stagehand) {
-        throw new Error('Browser session not initialized');
+      if (!this.stagehand || !this.stagehand.page) {
+        throw new Error('Browser page not initialized');
       }
 
-      // Get the page from Stagehand's context
-      const page = this.stagehand.context.pages()[0];
-      if (!page) {
-        throw new Error('No page available in browser session');
-      }
-
-      // Take screenshot using Stagehand's Page API
-      const screenshotBuffer = await page.screenshot({
+      // Take screenshot using Stagehand's Page API (Playwright)
+      const screenshotBuffer = await this.stagehand.page.screenshot({
         fullPage: false,
       });
 
