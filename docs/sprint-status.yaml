@@ -46,7 +46,7 @@ development_status:
 
   epic-2: contexted
   2-1-testagent-durable-object-skeleton: done
-  2-2-browser-rendering-integration-and-stagehand-setup: ready-for-dev
+  2-2-browser-rendering-integration-and-stagehand-setup: done
   2-3-phase-1-load-validation: ready-for-dev
   2-4-phase-2-control-discovery: ready-for-dev
   2-5-phase-3-gameplay-exploration-with-computer-use: ready-for-dev

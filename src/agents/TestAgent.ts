@@ -2,14 +2,17 @@
  * TestAgent Durable Object
  * Manages individual test execution sessions with browser automation
  * Story 2.1: Full implementation with state management, WebSocket, and phase methods
+ * Story 2.2: Browser Rendering integration with Stagehand
  * 
  * Types: DurableObject, DurableObjectState, Env are provided by wrangler types
  * via worker-configuration.d.ts (auto-generated from wrangler.toml)
  */
+import puppeteer from '@cloudflare/puppeteer';
+import { Stagehand } from '@browserbasehq/stagehand';
 import { insertTestEvent } from '../shared/helpers/d1';
 import { uploadScreenshot, uploadLog } from '../shared/helpers/r2';
 import { Phase, LogType } from '../shared/constants';
-import type { TestAgentState, EvidenceMetadata } from '../shared/types';
+import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError } from '../shared/types';
 
 export class TestAgent implements DurableObject {
   private state: DurableObjectState;
@@ -19,6 +22,9 @@ export class TestAgent implements DurableObject {
   private testRunId: string = '';
   private gameUrl: string = '';
   private inputSchema?: string;
+  
+  // Browser automation (Story 2.2)
+  private stagehand?: Stagehand;
   
   // WebSocket clients for real-time progress updates (not persisted)
   private websocketClients: WebSocket[] = [];
@@ -64,6 +70,9 @@ export class TestAgent implements DurableObject {
       inputSchema: this.inputSchema,
       evidence: await this.state.storage.get<EvidenceMetadata[]>('evidence') || [],
       phaseResults: await this.state.storage.get<Record<string, any>>('phaseResults') || {},
+      browserSession: await this.state.storage.get('browserSession'),
+      consoleLogs: await this.state.storage.get<ConsoleLogEntry[]>('consoleLogs') || [],
+      networkErrors: await this.state.storage.get<NetworkError[]>('networkErrors') || [],
     };
     
     await this.state.storage.put('agentState', agentState);
@@ -433,6 +442,226 @@ export class TestAgent implements DurableObject {
         this.websocketClients = this.websocketClients.filter(ws => ws !== client);
       }
     });
+  }
+
+  /**
+   * Launch browser session with Stagehand integration (Story 2.2)
+   * Creates browser session with viewport 1280x720, headless mode, and user agent
+   * Stores session handle in DO state for persistence across phases
+   */
+  private async launchBrowser(): Promise<Stagehand> {
+    try {
+      // Check for existing browser session
+      const existingSession = await this.state.storage.get('browserSession');
+      if (existingSession && this.stagehand) {
+        // Update lastUsed timestamp
+        await this.state.storage.put('browserSession', {
+          ...existingSession,
+          lastUsed: Date.now(),
+        });
+        return this.stagehand;
+      }
+
+      // Initialize Stagehand with LOCAL browser (using Cloudflare Browser Rendering via env.BROWSER)
+      this.stagehand = new Stagehand({
+        env: 'LOCAL',
+        verbose: 1,
+        model: 'gpt-4o',
+        localBrowserLaunchOptions: {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--window-size=1280,720',
+          ],
+        },
+      });
+
+      // Initialize Stagehand (connects to browser)
+      await this.stagehand.init();
+
+      // Set up console log capture using CDP (AC #7) and network monitoring (AC #8)
+      // Access CDP connection through Stagehand's context
+      try {
+        const cdpConnection = this.stagehand.context.conn;
+        
+        // Set user agent (AC #6) via CDP
+        await cdpConnection.send('Network.setUserAgentOverride', {
+          userAgent: 'GameEval TestAgent/1.0'
+        });
+        
+        // Enable Runtime domain for console logs
+        await cdpConnection.send('Runtime.enable');
+        cdpConnection.on('Runtime.consoleAPICalled', (params: any) => {
+          const level = params.type;
+          const text = params.args.map((arg: any) => {
+            if (arg.value !== undefined) return String(arg.value);
+            if (arg.description) return arg.description;
+            return String(arg);
+          }).join(' ');
+          
+          // Store console log asynchronously (don't block execution)
+          this.addConsoleLog(level, text).catch(err => 
+            console.error('Failed to store console log:', err)
+          );
+        });
+
+        // Enable Network domain for network monitoring
+        await cdpConnection.send('Network.enable');
+        
+        // Track failed responses
+        cdpConnection.on('Network.responseReceived', (params: any) => {
+          const status = params.response.status;
+          if (status >= 400) {
+            const url = params.response.url;
+            this.addNetworkError(url, status, `HTTP ${status}`).catch(err =>
+              console.error('Failed to store network error:', err)
+            );
+          }
+        });
+
+        // Track loading failures
+        cdpConnection.on('Network.loadingFailed', (params: any) => {
+          const url = params.documentURL || params.request?.url || 'unknown';
+          const error = params.errorText || 'Network request failed';
+          this.addNetworkError(url, undefined, error).catch(err =>
+            console.error('Failed to store network error:', err)
+          );
+        });
+      } catch (error) {
+        // Log error but don't fail browser launch
+        console.error('Failed to set up CDP monitoring:', error);
+      }
+
+      // Store browser session handle in DO state
+      const sessionId = `browser-${this.testRunId}-${Date.now()}`;
+      await this.state.storage.put('browserSession', {
+        handle: sessionId,
+        createdAt: Date.now(),
+        lastUsed: Date.now(),
+      });
+
+      // Initialize console logs and network errors arrays if not present
+      if (!await this.state.storage.get('consoleLogs')) {
+        await this.state.storage.put('consoleLogs', []);
+      }
+      if (!await this.state.storage.get('networkErrors')) {
+        await this.state.storage.put('networkErrors', []);
+      }
+
+      return this.stagehand;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to launch browser: ${message}`);
+    }
+  }
+
+  /**
+   * Close browser session and clean up resources (Story 2.2)
+   */
+  private async closeBrowser(): Promise<void> {
+    try {
+      // Check if browser session exists
+      const browserSession = await this.state.storage.get('browserSession');
+      if (!browserSession) {
+        return; // No-op if no session exists
+      }
+
+      // Close Stagehand (which closes the underlying browser)
+      if (this.stagehand) {
+        try {
+          await this.stagehand.close();
+        } catch (error) {
+          console.error('Failed to close Stagehand:', error);
+        }
+        
+        this.stagehand = undefined;
+      }
+
+      // Clear browser session from DO state
+      await this.state.storage.delete('browserSession');
+    } catch (error) {
+      // Log error but don't throw (graceful degradation)
+      console.error('Failed to close browser:', error);
+    }
+  }
+
+  /**
+   * Capture screenshot and save to R2 (Story 2.2)
+   * @param description - Description of the screenshot action
+   * @returns R2 public URL for the screenshot
+   */
+  private async captureScreenshot(description: string, phase: Phase = Phase.PHASE1): Promise<string> {
+    try {
+      // Verify browser session exists
+      if (!this.stagehand) {
+        throw new Error('Browser session not initialized');
+      }
+
+      // Get the page from Stagehand's context
+      const page = this.stagehand.context.pages()[0];
+      if (!page) {
+        throw new Error('No page available in browser session');
+      }
+
+      // Take screenshot using Stagehand's Page API
+      const screenshotBuffer = await page.screenshot({
+        fullPage: false,
+      });
+
+      // Convert Buffer to ArrayBuffer
+      const arrayBuffer = screenshotBuffer.buffer.slice(
+        screenshotBuffer.byteOffset,
+        screenshotBuffer.byteOffset + screenshotBuffer.byteLength
+      ) as ArrayBuffer;
+
+      // Save screenshot to R2 using existing helper
+      const url = await this.storeEvidence('screenshot', arrayBuffer, {
+        action: description,
+        phase,
+      });
+
+      return url;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to capture screenshot: ${message}`);
+    }
+  }
+
+  /**
+   * Add console log entry to DO state (Story 2.2)
+   */
+  private async addConsoleLog(level: string, text: string): Promise<void> {
+    try {
+      const consoleLogs = await this.state.storage.get<ConsoleLogEntry[]>('consoleLogs') || [];
+      consoleLogs.push({
+        timestamp: Date.now(),
+        level,
+        text,
+      });
+      await this.state.storage.put('consoleLogs', consoleLogs);
+    } catch (error) {
+      console.error('Failed to add console log:', error);
+    }
+  }
+
+  /**
+   * Add network error to DO state (Story 2.2)
+   */
+  private async addNetworkError(url: string, status?: number, error?: string): Promise<void> {
+    try {
+      const networkErrors = await this.state.storage.get<NetworkError[]>('networkErrors') || [];
+      networkErrors.push({
+        timestamp: Date.now(),
+        url,
+        status,
+        error: error || 'Network request failed',
+      });
+      await this.state.storage.put('networkErrors', networkErrors);
+    } catch (error) {
+      console.error('Failed to add network error:', error);
+    }
   }
 
   /**

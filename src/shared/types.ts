@@ -183,6 +183,44 @@ export interface PhaseResult {
 }
 
 /**
+ * Browser session handle stored in DO state
+ */
+export interface BrowserSessionHandle {
+  /** Unique browser session ID */
+  handle: string;
+  /** Timestamp when session was created (Unix epoch in milliseconds) */
+  createdAt: number;
+  /** Timestamp of last session access (Unix epoch in milliseconds) */
+  lastUsed: number;
+}
+
+/**
+ * Console log entry captured from browser
+ */
+export interface ConsoleLogEntry {
+  /** Timestamp when log was captured (Unix epoch in milliseconds) */
+  timestamp: number;
+  /** Console log level (log, warn, error, info, debug) */
+  level: string;
+  /** Log message text */
+  text: string;
+}
+
+/**
+ * Network error tracked during test execution
+ */
+export interface NetworkError {
+  /** Timestamp when error occurred (Unix epoch in milliseconds) */
+  timestamp: number;
+  /** URL that failed */
+  url: string;
+  /** HTTP status code if applicable */
+  status?: number;
+  /** Error description */
+  error: string;
+}
+
+/**
  * TestAgent Durable Object state structure
  */
 export interface TestAgentState {
@@ -196,5 +234,11 @@ export interface TestAgentState {
   evidence: EvidenceMetadata[];
   /** Results from each phase */
   phaseResults: Record<string, PhaseResult>;
+  /** Browser session handle for persistence across phases */
+  browserSession?: BrowserSessionHandle;
+  /** Console logs captured from browser */
+  consoleLogs: ConsoleLogEntry[];
+  /** Network errors tracked during test execution */
+  networkErrors: NetworkError[];
 }
 

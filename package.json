@@ -7,10 +7,12 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "lint": "tsc --noEmit",
-    "types": "wrangler types"
+    "types": "wrangler types",
+    "test": "wrangler dev --test-scheduled --local"
   },
   "dependencies": {
-    "stagehand": "latest"
+    "@browserbasehq/stagehand": "^3.0.1",
+    "@cloudflare/puppeteer": "latest"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
