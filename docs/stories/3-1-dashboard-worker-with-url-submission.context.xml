@@ -1,0 +1,246 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>1</storyId>
+    <title>Dashboard Worker with URL Submission</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-04</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-1-dashboard-worker-with-url-submission.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>game developer</asA>
+    <iWant>a web dashboard where I can submit game URLs for testing</iWant>
+    <soThat>I can easily request QA tests</soThat>
+    <tasks>
+### Task 1: Create Dashboard Worker File (AC: 1)
+- Create `src/workers/dashboard.ts` file
+- Implement Worker export default with `fetch(request: Request, env: Env): Promise&lt;Response&gt;` handler
+- Route root path (`/`) to serve HTML page
+- Route `/rpc/submitTest` POST requests to `submitTest()` RPC method handler
+- Return appropriate Content-Type headers (text/html for page, application/json for RPC)
+
+### Task 2: Implement Inline HTML/CSS/JS (AC: 2)
+- Create `getHTML()` function that returns complete HTML document with embedded CSS and JavaScript
+- Include HTML structure: `&lt;html&gt;`, `&lt;head&gt;`, `&lt;body&gt;` with proper meta tags
+- Embed CSS styles in `&lt;style&gt;` tag (Cloudflare design patterns: orange accents, monospace fonts)
+- Embed JavaScript in `&lt;script&gt;` tag for form handling and RPC calls
+- Verify no external assets referenced (all inline)
+- Test HTML renders correctly in browser
+
+### Task 3: Implement UI Following Cloudflare Design Patterns (AC: 3)
+- Apply orange accent color (#FF6B35 or Cloudflare orange) to primary buttons and highlights
+- Use monospace font family (Courier New, Monaco, monospace) for URLs and technical data
+- Create clean, minimal layout with adequate spacing and clear hierarchy
+- Ensure UI is professional and matches Cloudflare aesthetic
+- Test visual design matches requirements
+
+### Task 4: Add Header with Title and Tagline (AC: 4)
+- Add header section to HTML with "GameEval QA Pipeline" as main title
+- Add tagline below title (e.g., "Autonomous Browser Game QA Testing")
+- Style header with appropriate typography and spacing
+- Ensure header is visible and prominent
+
+### Task 5: Create URL Submission Form (AC: 5)
+- Create HTML form with:
+  - Game URL input field (type="url" or text with validation)
+  - Input Schema textarea (optional, labeled as "Input Schema (JSON)")
+  - Submit button
+- Add labels and placeholders for clarity
+- Style form with appropriate spacing and layout
+- Ensure form is accessible (proper labels, ARIA attributes if needed)
+
+### Task 6: Implement Submit Button RPC Call (AC: 6)
+- Add event listener to submit button (prevent default form submission)
+- Extract form values: `gameUrl` and `inputSchema` (if provided)
+- Call `POST /rpc/submitTest` with JSON body: `{ gameUrl, inputSchema }`
+- Handle response and display result to user
+- Show loading state while request is processing
+- Handle errors gracefully with user-friendly messages
+
+### Task 7: Implement submitTest RPC Method (AC: 7)
+- Create `submitTest(env: Env, gameUrl: string, inputSchema?: string): Promise&lt;SubmitTestResponse&gt;` method
+- Validate gameUrl format (must be HTTP/HTTPS)
+- Validate inputSchema if provided (must be valid JSON)
+- Generate testRunId using `crypto.randomUUID()`
+- Trigger Workflow via service binding: `await env.WORKFLOW.create().run({ testRunId, gameUrl, inputSchema: inputSchema || undefined })`
+- Return `{ testId: testRunId }` response
+- Handle Workflow trigger errors and return user-friendly error messages
+
+### Task 8: Implement Form Validation (AC: 8)
+- Add client-side validation for URL format (HTTP/HTTPS regex pattern)
+- Add client-side validation for JSON schema format (if provided, attempt JSON.parse)
+- Display validation error messages inline near form fields
+- Prevent form submission if validation fails
+- Add server-side validation in `submitTest()` method (re-validate inputs)
+- Return validation error messages that are user-friendly
+
+### Task 9: Implement Responsive Layout (AC: 9)
+- Add CSS media queries for desktop viewport (min-width: 768px recommended)
+- Ensure layout is readable and functional on desktop (1920x1080, 1366x768)
+- Test layout on common desktop resolutions
+- Note: Mobile optimization deferred to post-MVP (acceptable for this story)
+
+### Task 10: Add Testing
+- Test Dashboard Worker serves HTML correctly at root path
+- Test form validation (invalid URL, invalid JSON)
+- Test submitTest RPC method with valid inputs
+- Test Workflow trigger integration
+- Test error handling (Workflow trigger fails, invalid inputs)
+- Test UI displays correctly in browser
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+1. **Dashboard Worker created**: `src/workers/dashboard.ts` file exists with Worker implementation
+2. **Serves HTML/CSS/JS directly from Worker**: HTML, CSS, and JavaScript are embedded inline in the Worker response (no separate static hosting)
+3. **Clean, minimal UI following Cloudflare design patterns**: UI uses orange accents for primary actions, monospace fonts for URLs and technical data, clean minimal interface
+4. **Header displays**: "GameEval QA Pipeline" with tagline
+5. **URL submission form**: Form includes:
+   - Game URL field (required, validated HTTP/HTTPS)
+   - Input Schema field (optional, JSON textarea with validation)
+6. **Submit button triggers RPC call**: Submit button calls Dashboard Worker's `submitTest(gameUrl, inputSchema)` RPC method via POST request
+7. **On successful submission**: Generate UUID for testRunId, trigger Workflow via service binding `env.WORKFLOW.create().run({ testRunId, gameUrl, inputSchema })`, display test ID to user
+8. **Form validation**: URL format validated (must be HTTP/HTTPS), JSON schema format validated (if provided, must be valid JSON)
+9. **Responsive layout**: Layout works on desktop viewport (mobile optimization post-MVP acceptable)
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <!-- PRD: Dashboard UI Requirements -->
+      <doc path="docs/prd/7-design-considerations.md" title="Design Considerations" section="7.1 Dashboard UI/UX (Served by Workers)">
+Dashboard Worker serves HTML/CSS/JS directly from Worker (no separate static hosting). Layout includes header with "GameEval QA Pipeline" title and URL submission form. Clean, minimal interface following Cloudflare design patterns with orange accents for primary actions and monospace fonts for URLs/technical data.
+      </doc>
+      
+      <!-- PRD: Functional Requirements -->
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="4.1 Web Dashboard">
+FR-1.1: Dashboard MUST provide URL submission form accepting HTTP/HTTPS game URLs. FR-1.1.1: Dashboard MAY accept optional input schema (JSON) for AI agent guidance during testing.
+      </doc>
+      
+      <!-- Architecture: RPC-Only Pattern -->
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-001: Monorepo with RPC-Only Architecture">
+All internal communication via RPC service bindings (no exposed HTTP APIs). Single Workers repository handling frontend and backend. Simplifies deployment, reduces network overhead, improves security (no exposed internal endpoints).
+      </doc>
+      
+      <!-- Architecture: Service Communication -->
+      <doc path="docs/architecture/api-contracts.md" title="API Contracts" section="Dashboard Worker → Workflow">
+Workflow trigger pattern: `env.WORKFLOW.create().run({ testRunId: crypto.randomUUID(), gameUrl, inputSchema })`. All communication via RPC service bindings.
+      </doc>
+      
+      <!-- Epic 3 Tech Context -->
+      <doc path="docs/epic-3-tech-context.md" title="Epic 3 Tech Context" section="Story 3.1: Dashboard Worker with URL Submission">
+Dashboard Worker creates web UI served directly from Worker with inline HTML/CSS/JS (no separate static hosting). Implements RPC method `submitTest()` that validates inputs, generates UUID, triggers Workflow via service binding, returns test ID. UI follows Cloudflare design patterns with orange accents and monospace fonts.
+      </doc>
+      
+      <!-- Architecture: Implementation Patterns -->
+      <doc path="docs/architecture/implementation-patterns.md" title="Implementation Patterns" section="RPC Service Binding Pattern">
+All internal communication via RPC through `env` parameter. Example: `const result = await env.WORKFLOW.create().run({ testRunId, gameUrl })`. Always use async/await with try-catch at boundaries.
+      </doc>
+      
+      <!-- Architecture: Security -->
+      <doc path="docs/architecture/security-architecture.md" title="Security Architecture" section="Input Validation">
+Game URLs: HTTP/HTTPS only with format validation. Input schema: JSON validation with max 10KB size. Test ID: UUID format validation.
+      </doc>
+    </docs>
+    
+    <code>
+      <!-- Existing Workflow pattern for triggering tests -->
+      <artifact path="src/workflows/GameTestPipeline.ts" kind="workflow" symbol="GameTestPipeline" lines="39-65" reason="Existing Workflow implementation shows how Dashboard Worker will trigger test execution via service binding">
+The GameTestPipeline workflow shows the expected input format ({ testRunId, gameUrl, inputSchema }) and demonstrates the Workflow trigger pattern that Dashboard Worker needs to follow. Dashboard Worker will call `env.WORKFLOW.create().run(payload)` with same format.
+      </artifact>
+      
+      <!-- Shared types that need extension -->
+      <artifact path="src/shared/types.ts" kind="types" symbol="TestRun, DbResult" lines="1-59" reason="Existing type interfaces that Dashboard Worker will extend with RPC interface types">
+Dashboard Worker needs to add SubmitTestRequest, SubmitTestResponse, and TestRunSummary interfaces to this file for RPC method type safety.
+      </artifact>
+      
+      <!-- Error handling constants to use -->
+      <artifact path="src/shared/constants.ts" kind="constants" symbol="ERROR_MESSAGES, ERROR_PATTERNS" lines="1-46" reason="User-friendly error message patterns established in Story 2.7 that Dashboard Worker should use for validation errors">
+Dashboard Worker should use ERROR_MESSAGES.INVALID_URL, NETWORK_ERROR constants for form validation errors. Also use sanitizeErrorMessage patterns for any Workflow trigger failures.
+      </artifact>
+      
+      <!-- D1 helper functions for database operations -->
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="createTestRun, updateTestStatus" lines="12-44, 100-132" reason="Database helper functions Dashboard Worker may need for test record creation (though Workflow handles this)">
+Dashboard Worker might query test status after submission, though primary test record creation happens in Workflow. Shows existing D1 query patterns.
+      </artifact>
+      
+      <!-- Existing wrangler.toml configuration -->
+      <artifact path="wrangler.toml" kind="config" symbol="workflows binding" lines="38-42" reason="Workflow service binding already configured - Dashboard Worker will use env.WORKFLOW">
+Confirms WORKFLOW service binding is configured (binding name: WORKFLOW, class_name: GameTestPipeline). Dashboard Worker can call `env.WORKFLOW.create().run()` without additional configuration.
+      </artifact>
+    </code>
+    
+    <dependencies>
+      <node>
+        <package name="@cloudflare/playwright" version="^1.0.0" purpose="Browser automation (used by TestAgent, not directly by Dashboard Worker)" />
+        <package name="@browserbasehq/stagehand" version="^2.5.0" purpose="AI-powered browser automation (used by TestAgent, not directly by Dashboard Worker)" />
+        <package name="zod" version="3.25.67" purpose="Schema validation (optional for Dashboard Worker input validation)" />
+        <package name="zod-to-json-schema" version="^3.24.6" purpose="JSON schema generation (optional for Dashboard Worker input validation)" />
+        <package name="@types/node" version="^24.10.0" purpose="TypeScript type definitions for Node.js APIs" devDependency="true" />
+        <package name="typescript" version="latest" purpose="TypeScript compiler" devDependency="true" />
+        <package name="wrangler" version="latest" purpose="Cloudflare Workers CLI for development and deployment" devDependency="true" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+- **ADR-001: RPC-Only Architecture**: Dashboard Worker uses RPC service bindings exclusively for all internal communication. No exposed HTTP REST API endpoints.
+- **Inline HTML/CSS/JS**: All UI assets must be embedded in Worker response. No separate static hosting or external asset references.
+- **Cloudflare Design Patterns**: UI must follow Cloudflare aesthetic with orange accents (#FF6B35), monospace fonts (Courier New, Monaco) for technical data, clean minimal interface.
+- **Service Binding Pattern**: Use `env.WORKFLOW.create().run()` pattern established in GameTestPipeline (see src/workflows/GameTestPipeline.ts lines 62-64).
+- **UUID Generation**: Use `crypto.randomUUID()` for testRunId generation (Workers runtime API, no external library needed).
+- **Error Message Sanitization**: Use ERROR_MESSAGES constants from src/shared/constants.ts for user-friendly error messages. Never expose stack traces or internal error codes.
+- **Input Validation**: Server-side validation must re-check URL format (HTTP/HTTPS) and JSON schema format even after client-side validation.
+- **Form Validation**: Client-side validation prevents submission until inputs are valid. Display inline error messages near form fields.
+- **No Database Queries**: Dashboard Worker triggers Workflow but doesn't create test records directly. Workflow handles test_runs table insertion (see GameTestPipeline.ts launchAgent method).
+  </constraints>
+  
+  <interfaces>
+    <interface name="SubmitTestRequest" kind="RPC method input" signature="{ gameUrl: string; inputSchema?: string }" path="src/shared/types.ts">
+Request body for Dashboard Worker's submitTest() RPC method. gameUrl is required HTTP/HTTPS URL, inputSchema is optional JSON string.
+    </interface>
+    
+    <interface name="SubmitTestResponse" kind="RPC method output" signature="{ testId: string }" path="src/shared/types.ts">
+Response from Dashboard Worker's submitTest() RPC method. Returns testId (UUID) for tracking test execution.
+    </interface>
+    
+    <interface name="GameTestPipelineInput" kind="Workflow input" signature="{ testRunId: string; gameUrl: string; inputSchema?: string }" path="src/workflows/GameTestPipeline.ts">
+Workflow input format (already implemented in Epic 1). Dashboard Worker must match this format exactly when calling env.WORKFLOW.create().run().
+    </interface>
+    
+    <interface name="Env" kind="Environment bindings" signature="{ WORKFLOW: Workflow; DB: D1Database; EVIDENCE_BUCKET: R2Bucket; ... }" path="worker-configuration.d.ts">
+Auto-generated by wrangler types. Dashboard Worker receives Env via fetch() handler second parameter.
+    </interface>
+  </interfaces>
+  
+  <tests>
+    <standards>
+Dashboard Worker follows existing testing patterns established in Epic 1 and Epic 2:
+- **Unit Testing**: Test individual RPC methods in isolation (submitTest validation, UUID generation, error handling)
+- **Integration Testing**: Test Workflow trigger integration, form submission flow end-to-end
+- **Manual Testing**: Test UI rendering, form validation, visual design in browser
+- **Error Handling Tests**: Test invalid URL format, invalid JSON schema, Workflow trigger failures
+- **Test Location**: Integration tests in `tests/` directory following pattern from phase1-integration.test.ts, phase2-integration.test.ts
+- **No Complex Test Runner**: Use manual testing with `wrangler dev` and simple integration tests as seen in existing test files
+    </standards>
+    
+    <locations>
+      <location>tests/story-3.1-dashboard-worker.test.ts</location>
+      <location>tests/phase3-integration.test.ts (extend for dashboard testing)</location>
+    </locations>
+    
+    <ideas>
+      <test ac="1" idea="Verify src/workers/dashboard.ts file exists and exports default Worker with fetch() handler" />
+      <test ac="2" idea="Call GET / and verify response Content-Type is text/html, body contains complete HTML document with embedded CSS and JavaScript (no external asset references)" />
+      <test ac="3,4" idea="Parse HTML response and verify: orange accent colors in CSS (#FF6B35), monospace font for code blocks, header contains 'GameEval QA Pipeline' title and tagline" />
+      <test ac="5" idea="Parse HTML form and verify: input field with name='gameUrl' (required), textarea with name='inputSchema' (optional), submit button exists" />
+      <test ac="6,7" idea="Submit valid form data to POST /rpc/submitTest, verify response contains testId (UUID format), verify Workflow.create().run() was called with correct payload" />
+      <test ac="8" idea="Test form validation: submit invalid URL (not HTTP/HTTPS) and verify 400 error response with user-friendly error message, submit invalid JSON schema and verify 400 error with JSON parse error" />
+      <test ac="9" idea="Test responsive layout: render HTML at desktop viewport sizes (1920x1080, 1366x768) and verify layout is readable and functional" />
+      <test ac="7" idea="Test Workflow trigger failure: mock env.WORKFLOW.create().run() to throw error, verify Dashboard Worker returns user-friendly error message without stack trace" />
+      <test ac="6" idea="Test loading state: submit form and verify UI shows loading indicator while request is processing" />
+    </ideas>
+  </tests>
+</story-context>
+
