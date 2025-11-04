@@ -66,3 +66,31 @@ export enum EventType {
   CONTROL_DISCOVERED = 'control_discovered',
 }
 
+// R2 Storage paths and types (Story 1.3)
+
+/**
+ * Storage path templates for R2 artifacts
+ */
+export const STORAGE_PATHS = {
+  SCREENSHOT: 'tests/{test_id}/screenshots/{timestamp}-{phase}-{action}.png',
+  LOG: 'tests/{test_id}/logs/{log_type}.log',
+} as const;
+
+/**
+ * Log file types for R2 storage
+ */
+export enum LogType {
+  CONSOLE = 'console',
+  NETWORK = 'network',
+  AGENT_DECISIONS = 'agent-decisions',
+}
+
+/**
+ * R2 bucket configuration
+ */
+export const R2_CONFIG = {
+  BUCKET_NAME: 'gameeval-evidence',
+  BINDING_NAME: 'EVIDENCE_BUCKET',
+  PUBLIC_URL_BASE: 'R2_PUBLIC_URL', // Env var for custom domain
+} as const;
+

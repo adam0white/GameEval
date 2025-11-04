@@ -144,6 +144,97 @@ npx wrangler d1 execute gameeval-db --remote --command="SELECT name FROM sqlite_
 - `idx_test_events_test_run_id` - Join events to tests
 - `idx_test_events_timestamp` - Sort events chronologically
 
+## R2 Storage Configuration
+
+### R2 Bucket Setup
+
+The R2 bucket for evidence storage is already configured:
+
+**Bucket Name:** `gameeval-evidence`  
+**Binding Name:** `EVIDENCE_BUCKET` (accessible via `env.EVIDENCE_BUCKET` in Workers)
+
+### Verify R2 Bucket
+
+```bash
+# List all R2 buckets
+npx wrangler r2 bucket list
+
+# Check specific bucket exists
+npx wrangler r2 bucket list | grep gameeval-evidence
+```
+
+### Storage Structure
+
+The R2 bucket organizes artifacts by test run ID:
+
+**Screenshots:**
+```
+tests/{test_id}/screenshots/{timestamp}-{phase}-{action}.png
+```
+
+**Logs:**
+```
+tests/{test_id}/logs/{log_type}.log
+```
+
+Log types: `console`, `network`, `agent-decisions`
+
+### Public Access Configuration (Optional)
+
+For dashboard viewing of screenshots and logs, enable public access:
+
+1. Open Cloudflare Dashboard
+2. Navigate to R2 > `gameeval-evidence`
+3. Go to Settings > Public Access
+4. Click "Allow Access" to enable R2.dev subdomain
+5. Copy the public URL (format: `https://pub-<hash>.r2.dev`)
+6. **(Recommended)** Add a custom domain (e.g., `evidence.yourdomain.com`) and point it to your R2 bucket.
+
+Once your public URL is available, set it in `wrangler.toml`:
+
+```toml
+[vars]
+R2_PUBLIC_URL = "https://evidence.adamwhite.work"
+```
+
+This environment variable is used by the helper functions to generate correct artifact URLs.
+
+### Testing R2 Storage
+
+Test R2 helper functions locally:
+
+```bash
+# Start local dev server
+npm run dev
+
+# Test R2 operations (temporary endpoint)
+curl http://localhost:8787/test-r2
+```
+
+The test endpoint verifies:
+- Screenshot upload with proper Content-Type
+- Log file creation and appending
+- Artifact retrieval with public URLs
+
+### R2 Helper Functions
+
+Three main helper functions in `src/shared/helpers/r2.ts`:
+
+1. **`uploadScreenshot()`** - Upload PNG screenshots with organized paths
+2. **`uploadLog()`** - Create or append to log files
+3. **`getTestArtifacts()`** - Retrieve all artifacts for a test with public URLs
+
+All functions return `DbResult<T>` for consistent error handling.
+
+### Storage Best Practices
+
+- Screenshots include timestamp for chronological sorting
+- Log files use append pattern (fetch-modify-put)
+- All timestamps use Unix epoch milliseconds (`Date.now()`)
+- Content-Type headers set automatically:
+  - `image/png` for screenshots
+  - `text/plain; charset=utf-8` for logs
+
 ## Next Steps
 
 After successful setup:
@@ -153,6 +244,7 @@ After successful setup:
 3. ✅ Local development working
 4. ✅ Resources created in Cloudflare
 5. ✅ Database migrations completed (Story 1.2)
+6. ✅ R2 storage configured (Story 1.3)
 
-Ready to implement Story 1.3: R2 Storage Setup!
+Ready to implement Story 1.4: Workflow Orchestration Setup!
 

@@ -7,6 +7,8 @@
  * Add custom application types here as needed for future stories
  */
 
+import type { Phase, LogType } from './constants';
+
 // Database result types (Story 1.2)
 
 /**
@@ -53,4 +55,57 @@ export interface TestEvent {
 export type DbResult<T> = 
   | { success: true; data: T }
   | { success: false; error: string };
+
+// R2 Storage types (Story 1.3)
+
+/**
+ * Metadata extracted from screenshot paths
+ */
+export interface ScreenshotMetadata {
+  /** Test pipeline phase (phase1-phase4) */
+  phase: Phase;
+  /** Action description (e.g., 'click-play-button') */
+  action: string;
+  /** Screenshot timestamp (Unix epoch in milliseconds) */
+  timestamp: number;
+}
+
+/**
+ * Screenshot artifact stored in R2 with parsed metadata
+ */
+export type ScreenshotArtifact = {
+  /** R2 object key (full path) */
+  key: string;
+  /** Artifact discriminator */
+  type: 'screenshot';
+  /** Public URL for accessing the artifact */
+  url: string;
+  /** Upload timestamp (Unix epoch in milliseconds) */
+  uploaded_at: number;
+  /** Parsed metadata extracted from the object key */
+  metadata: ScreenshotMetadata;
+};
+
+/**
+ * Log artifact stored in R2 with parsed metadata
+ */
+export type LogArtifact = {
+  /** R2 object key (full path) */
+  key: string;
+  /** Artifact discriminator */
+  type: 'log';
+  /** Public URL for accessing the artifact */
+  url: string;
+  /** Upload timestamp (Unix epoch in milliseconds) */
+  uploaded_at: number;
+  /** Parsed metadata extracted from the object key */
+  metadata: {
+    logType: LogType;
+  };
+};
+
+/**
+ * Represents a test artifact stored in R2
+ */
+export type TestArtifact = ScreenshotArtifact | LogArtifact;
 
