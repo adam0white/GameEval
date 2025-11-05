@@ -55,7 +55,7 @@ development_status:
   epic-2-retrospective: completed
 
   epic-3: contexted
-  3-1-dashboard-worker-with-url-submission: ready-for-dev
+  3-1-dashboard-worker-with-url-submission: done
   3-2-test-run-list-with-real-time-status: backlog
   3-3-websocket-connection-for-live-updates: backlog
   3-4-detailed-test-report-view: backlog

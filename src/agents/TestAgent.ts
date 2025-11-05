@@ -534,7 +534,8 @@ export class TestAgent implements DurableObject {
       // Stagehand page.observe() returns array of interactive element actions
       // Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
       // observe() identifies interactive elements on the page
-      observedElements = await page.observe();
+      // Use shorter DOM settle timeout to speed up discovery
+      observedElements = await page.observe({ domSettleTimeoutMs: 3000 });
     } catch (observeError) {
       const message = observeError instanceof Error ? observeError.message : 'Unknown error';
       await insertTestEvent(
@@ -933,10 +934,11 @@ export class TestAgent implements DurableObject {
     await this.logAIDecision('control-strategy', `Using ${controlStrategy} controls for gameplay`, 'initiated');
     
     // Define gameplay goals (AC #3)
+    // Prioritize keyboard actions over clicks to avoid canvas overlay timeout issues
     const goals = [
-      'Test keyboard movement controls by pressing WASD or arrow keys',
-      'Click on interactive game elements or buttons',
-      'Explore the game interface for 30 seconds',
+      'Use keyboard controls (WASD or arrow keys) to interact with the game canvas. Prefer keyboard over clicking virtual D-pad buttons.',
+      'Test keyboard inputs by pressing different keys (W, A, S, D, Arrow keys, Space, Enter)',
+      'If keyboard controls don\'t work, then click on interactive game elements or buttons',
     ];
 
     try {
@@ -968,19 +970,27 @@ export class TestAgent implements DurableObject {
         try {
           // Use Stagehand observe to plan actions (AC #2)
           // Reference: https://github.com/cloudflare/playwright/blob/main/packages/playwright-cloudflare/examples/stagehand/src/worker/index.ts
-          const actions = await page.observe(goal);
+          // Use shorter timeouts to avoid long waits
+          const actions = await page.observe({ instruction: goal, domSettleTimeoutMs: 3000 });
           
-          // Execute each observed action using Stagehand act (AC #2)
+          // Execute each observed action using Stagehand act with retry (AC #2)
           for (const action of actions) {
-            await page.act(action);
-            result.actionsTaken++;
-            lastProgressTime = Date.now();
-            
-            // Log AI decision (AC #10)
-            await this.logAIDecision('autonomous-action', `Executed: ${action}`, 'success');
-            
-            // Small delay between actions
-            await page.waitForTimeout(500);
+            try {
+              // Use retry logic to handle overlapping elements
+              await this.executeActWithRetry(page, action, 2);
+              result.actionsTaken++;
+              lastProgressTime = Date.now();
+              
+              // Log AI decision (AC #10)
+              await this.logAIDecision('autonomous-action', `Executed: ${action.description || 'action'}`, 'success');
+              
+              // Small delay between actions
+              await page.waitForTimeout(500);
+            } catch (actionError) {
+              // Log action failure but continue with next action
+              const message = actionError instanceof Error ? actionError.message : 'Unknown error';
+              await this.logAIDecision('autonomous-action', `Failed: ${action.description || 'action'} - ${message}`, 'failed');
+            }
           }
           
           // Capture screenshot after goal completion (AC #6, AC #7)
@@ -1067,6 +1077,90 @@ export class TestAgent implements DurableObject {
       Phase.PHASE3, 
       `Phase 3 complete - ${result.actionsTaken} actions, ${screenshotCount} screenshots captured`
     );
+  }
+
+  /**
+   * Execute Stagehand act() with improved retry logic for overlapping elements
+   * Optimized to bypass Playwright's 3500ms timeout by using force click for click actions
+   */
+  private async executeActWithRetry(page: any, action: ObserveResult, maxRetries = 2): Promise<boolean> {
+    const startTime = Date.now();
+    let lastError: Error | undefined;
+    
+    // For click actions with overlay issues, try force click first
+    // This bypasses Playwright's 3500ms actionability timeout
+    if (action.method === 'click' && action.selector) {
+      try {
+        const selector = action.selector.replace('xpath=', '');
+        const locator = page.locator(`xpath=${selector}`);
+        
+        // Try force click first (bypasses overlay checks, ~100ms)
+        await locator.click({ force: true, timeout: 2000 });
+        
+        const duration = Date.now() - startTime;
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE3,
+          'action_success',
+          `Force click succeeded: ${action.description || 'click'} (${duration}ms)`
+        );
+        return true;
+      } catch (forceError) {
+        // Force click failed, fall back to Stagehand's act() with JS click fallback
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE3,
+          'action_fallback',
+          `Force click failed, using Stagehand fallback: ${action.description || 'click'}`
+        );
+      }
+    }
+    
+    // For non-click actions or if force click failed, use Stagehand's act()
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await insertTestEvent(
+            this.env.DB,
+            this.testRunId,
+            Phase.PHASE3,
+            'retry_action',
+            `Retrying action (attempt ${attempt + 1}/${maxRetries + 1}): ${action.description || 'unknown'}`
+          );
+          
+          await page.waitForTimeout(500);
+        }
+        
+        // Execute the action - Stagehand internally handles fallback to JS click
+        await page.act(action);
+        
+        const duration = Date.now() - startTime;
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE3,
+          'action_success',
+          `${action.method} succeeded: ${action.description || 'action'} (${duration}ms)`
+        );
+        return true;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        
+        const errorMsg = lastError.message.substring(0, 200);
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE3,
+          'action_failed',
+          `Action attempt ${attempt + 1} failed: ${errorMsg}`
+        );
+      }
+    }
+    
+    // All retries exhausted
+    throw lastError || new Error('Action failed after all retries');
   }
 
   /**
@@ -1914,10 +2008,17 @@ Return ONLY valid JSON in this exact format:
         },
         llmClient,
         verbose: 1,
+        domSettleTimeoutMs: 3000, // Reduced from 5s to 3s for faster interactions
+        enableCaching: false, // Disable caching for more reliable test runs
       });
 
       // Initialize Stagehand
       await this.stagehand.init();
+
+      // Configure Playwright with aggressive timeouts for faster fallback
+      // When elements are blocked by overlays, fail fast and retry with force click
+      this.stagehand.page.context().setDefaultTimeout(1500); // Reduced from 2s to 1.5s
+      this.stagehand.page.context().setDefaultNavigationTimeout(30000);
 
       // Set viewport to 1280x720 (AC #1)
       await this.stagehand.page.setViewportSize({ width: 1280, height: 720 });
@@ -1948,8 +2049,8 @@ Return ONLY valid JSON in this exact format:
       return this.stagehand;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[TestAgent] Browser launch error:', error);
-      console.error('[TestAgent] Error details:', { message, stack: error instanceof Error ? error.stack : undefined });
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error('[TestAgent] Browser launch error:', { message, stack });
       throw new Error(`Failed to launch browser: ${message}`);
     }
   }

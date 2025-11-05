@@ -270,7 +270,9 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
   ): Promise<void> {
     try {
       // Generate TestAgent DO ID from test run UUID (1:1 mapping)
-      const testAgentId = this.env.TEST_AGENT.idFromString(testRunId);
+      // Note: idFromName() accepts any string (including UUIDs with dashes)
+      // and creates a deterministic DO ID, ensuring same testRunId -> same DO instance
+      const testAgentId = this.env.TEST_AGENT.idFromName(testRunId);
       const testAgent = this.env.TEST_AGENT.get(testAgentId);
 
       // Update status to 'running'
@@ -329,7 +331,7 @@ export class GameTestPipeline extends WorkflowEntrypoint<Env> {
       );
 
       // Get TestAgent DO instance
-      const testAgentId = this.env.TEST_AGENT.idFromString(testRunId);
+      const testAgentId = this.env.TEST_AGENT.idFromName(testRunId);
       const testAgent = this.env.TEST_AGENT.get(testAgentId);
 
       // Call phase endpoint

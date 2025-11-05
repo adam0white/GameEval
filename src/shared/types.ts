@@ -316,3 +316,23 @@ export interface TestAgentState {
   networkErrors: NetworkError[];
 }
 
+// Dashboard Worker RPC types (Story 3.1)
+
+/**
+ * Request body for Dashboard Worker's submitTest() RPC method
+ */
+export interface SubmitTestRequest {
+  /** Game URL to test (required, must be HTTP/HTTPS) */
+  gameUrl: string;
+  /** Optional input schema JSON string for test guidance */
+  inputSchema?: string;
+}
+
+/**
+ * Response from Dashboard Worker's submitTest() RPC method
+ */
+export interface SubmitTestResponse {
+  /** Test run UUID for tracking test execution */
+  testId: string;
+}
+
