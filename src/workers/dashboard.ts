@@ -57,13 +57,27 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    // Route: Serve HTML page at root
-    if (url.pathname === '/' && request.method === 'GET') {
-      return new Response(getHTML(), {
-        headers: {
-          'Content-Type': 'text/html;charset=UTF-8',
-        },
-      });
+    // Route: Serve HTML page at root and all SPA routes
+    if (request.method === 'GET' && !url.pathname.startsWith('/rpc/') && !url.pathname.startsWith('/ws') && !url.pathname.startsWith('/r2/')) {
+      try {
+        // Try to serve static asset first
+        const assetResponse = await env.ASSETS.fetch(request);
+        if (assetResponse.status === 200) {
+          return assetResponse;
+        }
+        
+        // Fallback to index.html for SPA routing
+        const indexRequest = new Request(new URL('/', url.origin), request);
+        return await env.ASSETS.fetch(indexRequest);
+      } catch (error) {
+        // Fallback to inline HTML if assets aren't available (dev mode)
+        console.warn('Assets not available, serving inline HTML');
+        return new Response(getHTML(), {
+          headers: {
+            'Content-Type': 'text/html;charset=UTF-8',
+          },
+        });
+      }
     }
 
     // Route: Handle RPC submitTest endpoint
@@ -363,6 +377,24 @@ async function listTests(env: Env): Promise<TestRunSummary[]> {
       status = 'queued';
     }
 
+    // Get latest screenshot for thumbnail (artifacts sorted newest-first in getTestArtifacts)
+    let latestScreenshot: { url: string } | undefined;
+    try {
+      const artifactsResult = await getTestArtifacts(env.EVIDENCE_BUCKET, test.id, env);
+      if (artifactsResult.success) {
+        const screenshots = artifactsResult.data.filter(a => a.type === 'screenshot');
+        if (screenshots.length > 0) {
+          // Get the FIRST screenshot (most recent, due to DESC sort in getTestArtifacts)
+          const lastScreenshot = screenshots[0];
+          if (lastScreenshot.type === 'screenshot') {
+            latestScreenshot = { url: lastScreenshot.url };
+          }
+        }
+      }
+    } catch (err) {
+      // Silently continue if screenshot fetch fails
+    }
+
     summaries.push({
       id: test.id,
       url: test.url,
@@ -373,6 +405,7 @@ async function listTests(env: Env): Promise<TestRunSummary[]> {
       createdAt: test.created_at,
       completedAt: test.completed_at ?? undefined,
       duration,
+      latestScreenshot,
     });
   }
 

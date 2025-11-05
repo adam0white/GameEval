@@ -358,6 +358,8 @@ export interface TestRunSummary {
   completedAt?: number;
   /** Test duration in milliseconds (if completed) */
   duration?: number;
+  /** Latest screenshot for thumbnail preview */
+  latestScreenshot?: { url: string };
 }
 
 /**

@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "npm run build:frontend && wrangler dev",
+    "dev:frontend": "vite",
+    "dev:worker": "wrangler dev",
+    "build:frontend": "vite build",
+    "deploy": "npm run build:frontend && wrangler deploy",
     "lint": "tsc --noEmit",
     "types": "wrangler types",
     "test": "echo 'To run integration tests: Start wrangler dev in one terminal, then run: curl http://localhost:8787/test' && echo 'To test scheduled workers: npm run test:scheduled'",
@@ -16,12 +19,28 @@
     "@browserbasehq/stagehand": "^2.5.0",
     "@cloudflare/playwright": "^1.0.0",
     "@cloudflare/puppeteer": "latest",
+    "react-router-dom": "^7.9.5",
     "zod": "3.25.67",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "autoprefixer": "^10.4.21",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.552.0",
+    "postcss": "^8.5.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss": "^3.4.18",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "latest",
+    "vite": "^7.2.0",
+    "vite-plugin-static-copy": "^3.1.4",
     "wrangler": "latest"
   }
 }

@@ -745,6 +745,12 @@ Monitor: Production logs for first 24 hours
 - **Q4**: Should dashboard support user authentication? (Currently no auth, public access)
 - **Q5**: Should dashboard support custom themes or branding? (Currently follows Cloudflare design patterns)
 
+## Post-Review Follow-ups
+
+- Decide whether to retain inline Worker delivery or formally adopt the React + Vite pipeline and update ADR-001 accordingly.
+- Adjust build tooling so Cloudflare ASSETS serves `/index.html` from `dist/frontend/index.html` rather than falling back to legacy inline HTML.
+- Track completion of the Card/Table toggle, Agent Focus confidence metric, and typography scale updates that the review identified as gaps.
+
 ## Test Strategy Summary
 
 ### Unit Testing
