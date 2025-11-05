@@ -435,6 +435,15 @@ export class TestAgent implements DurableObject {
         await this.env.DB.prepare(
           'UPDATE test_runs SET status = ?, updated_at = ? WHERE id = ?'
         ).bind('running', Date.now(), this.testRunId).run();
+        
+        // Broadcast status change to 'running'
+        this.broadcastToClients({
+          type: 'status',
+          status: 'running',
+          phase: Phase.PHASE1,
+          message: 'Test is now running',
+          timestamp: Date.now(),
+        });
       } catch (error) {
         console.error('Failed to update test_runs status:', error);
       }
@@ -1826,8 +1835,26 @@ Return ONLY valid JSON in this exact format:
     }
 
     // Task 12: Broadcast final results via WebSocket
-    const finalMessage = `Phase 4 complete - Overall Score: ${overallScore}/100 (Load: ${metrics[0].score}, Visual: ${metrics[1].score}, Controls: ${metrics[2].score}, Playability: ${metrics[3].score}, Technical: ${metrics[4].score})`;
+    const finalMessage = `Test complete! Overall Score: ${overallScore}/100 (Load: ${metrics[0].score}, Visual: ${metrics[1].score}, Controls: ${metrics[2].score}, Playability: ${metrics[3].score}, Technical: ${metrics[4].score})`;
     await this.updateStatus(Phase.PHASE4, finalMessage);
+    
+    // Broadcast completion with score data
+    this.broadcastToClients({
+      type: 'complete',
+      status: 'completed',
+      message: finalMessage,
+      timestamp: Date.now(),
+      data: {
+        overallScore,
+        metrics: {
+          load: metrics[0].score,
+          visual: metrics[1].score,
+          controls: metrics[2].score,
+          playability: metrics[3].score,
+          technical: metrics[4].score,
+        },
+      },
+    });
     
     await insertTestEvent(
       this.env.DB,
@@ -1872,9 +1899,9 @@ Return ONLY valid JSON in this exact format:
         );
       }
 
-      // Broadcast via WebSocket (rate limited to 1 event per 5 seconds)
+      // Broadcast via WebSocket (rate limited to 1 event per 500ms for responsive updates)
       const now = Date.now();
-      if (now - this.lastBroadcast >= 5000) {
+      if (now - this.lastBroadcast >= 500) {
         this.broadcastToClients({
           type: 'progress',
           phase,

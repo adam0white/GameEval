@@ -1,0 +1,116 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>6</storyId>
+    <title>Production Deployment and Documentation</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-6-production-deployment-and-documentation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>GameEval deployed to production with basic documentation</iWant>
+    <soThat>the system is accessible and maintainable</soThat>
+    <tasks>
+      <task id="1" acceptanceCriteria="1">Deploy Dashboard Worker to Production</task>
+      <task id="2" acceptanceCriteria="2">Deploy TestAgent DO to Production</task>
+      <task id="3" acceptanceCriteria="3">Deploy Workflow to Production</task>
+      <task id="4" acceptanceCriteria="4">Configure Production Bindings</task>
+      <task id="5" acceptanceCriteria="5">Set Up Production Environment Variables and Secrets</task>
+      <task id="6" acceptanceCriteria="6">Create README.md Documentation</task>
+      <task id="7" acceptanceCriteria="7">Create USAGE.md Documentation</task>
+      <task id="8" acceptanceCriteria="8">Configure Custom Domain (Optional)</task>
+      <task id="9" acceptanceCriteria="9">Test Production Deployment</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Deploy Dashboard Worker to Cloudflare Workers production: Dashboard Worker deployed to production using `wrangler deploy`, accessible at production URL, all RPC methods functional, HTML/CSS/JS served correctly</criterion>
+    <criterion id="2">Deploy TestAgent DO to production: TestAgent Durable Object deployed to production, Durable Objects binding configured correctly, TestAgent instances can be created and accessed</criterion>
+    <criterion id="3">Deploy Workflow to production: GameTestPipeline workflow deployed to production, Workflow service binding configured correctly, workflow can be triggered via Dashboard Worker</criterion>
+    <criterion id="4">Configure production bindings: D1, R2, Browser Rendering, AI Gateway: All service bindings configured in wrangler.toml production environment, D1 database accessible, R2 bucket accessible, Browser Rendering accessible, AI Gateway accessible</criterion>
+    <criterion id="5">Set up production environment variables and secrets: Production secrets configured (AI Gateway keys, any external API keys), environment variables set via Wrangler secrets, no secrets exposed in code or client-side JavaScript</criterion>
+    <criterion id="6">Create README.md with: Project overview and architecture, Setup instructions for local development, Deployment guide, Environment variable reference, RPC service binding documentation: README.md created/updated with all required sections, architecture overview describes system components, setup instructions work for new developers, deployment guide includes production deployment steps, environment variables documented, RPC bindings explained</criterion>
+    <criterion id="7">Create USAGE.md with: How to submit tests via dashboard, How to interpret quality scores, Input schema format and examples, Troubleshooting common issues: USAGE.md created with user guide, step-by-step instructions for submitting tests, explanation of quality score interpretation, input schema JSON format with examples, troubleshooting section with common issues and solutions</criterion>
+    <criterion id="8">Configure custom domain (optional, post-MVP acceptable): Custom domain configured (if desired), DNS records set up, SSL certificate configured (optional, acceptable post-MVP)</criterion>
+    <criterion id="9">Test production deployment with example game: Submit test with example game URL in production environment, verify test executes successfully, verify dashboard displays results correctly, verify WebSocket updates work, verify all components functional</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-3-live-dashboard-real-time-updates-mvp-complete.md" title="Epic 3: Live Dashboard & Real-Time Updates" section="Story 3.6" snippet="Story 3.6 covers production deployment and documentation. Deploy Dashboard Worker, TestAgent DO, and Workflow to production. Configure production bindings and create README.md and USAGE.md documentation." />
+      <doc path="docs/epic-3-tech-context.md" title="Epic Technical Specification: Live Dashboard & Real-Time Updates" section="Story 3.6: Production Deployment and Documentation" snippet="Story 3.6 workflow: Configure wrangler.toml, set production secrets, deploy all components, create documentation, test with example game." />
+      <doc path="docs/architecture/deployment-architecture.md" title="Deployment Architecture" section="Deployment Model" snippet="Direct to Production/Staging model using wrangler deploy. No CI/CD pipeline needed. Global distribution to 300+ Cloudflare edge locations automatic. Rollback via wrangler rollback." />
+      <doc path="docs/architecture/development-environment.md" title="Development Environment" section="Setup Commands" snippet="Prerequisites: Node.js, npm, Wrangler CLI, Cloudflare Account. Setup commands for D1, R2, secrets, and local development." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-001, ADR-005" snippet="ADR-001: RPC-only architecture, no exposed HTTP APIs. ADR-005: Direct Wrangler Deploy, no CI/CD pipeline needed." />
+      <doc path="docs/architecture/project-structure.md" title="Project Structure" section="Project Structure" snippet="Project structure: src/ with workers/, workflows/, agents/, shared/. Root files: wrangler.toml, package.json, README.md." />
+      <doc path="docs/architecture/consistency-rules.md" title="Consistency Rules" section="Naming Conventions, Code Organization" snippet="Database snake_case, TypeScript camelCase/PascalCase, R2 paths lowercase hyphen-separated. Error handling patterns, import organization." />
+      <doc path="docs/prd/1-introductionoverview.md" title="Introduction/Overview" section="Overview" snippet="GameEval QA Pipeline is an AI-powered autonomous testing system for browser-based games. Target games: DOM-based UI elements." />
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="Architecture Pattern" snippet="Workflows + Agents SDK pattern. One Agent Per Test. TestAgent lifecycle and state management." />
+      <doc path="docs/stories/3-5-example-game-testing-and-validation.md" title="Story 3.5: Example Game Testing and Validation" section="Learnings" snippet="Validation process for end-to-end testing. Edge case documentation. Test execution validation approach." />
+    </docs>
+    <code>
+      <code path="src/index.ts" kind="entry-point" symbol="fetch handler" lines="1-24" reason="Main entry point exports TestAgent DO and GameTestPipeline Workflow, delegates to Dashboard Worker" />
+      <code path="src/workers/dashboard.ts" kind="worker" symbol="DashboardWorker" lines="1-1366" reason="Dashboard Worker implementation with RPC methods: submitTest(), listTests(), getTestReport(), exportTestJSON(). Serves HTML/CSS/JS inline." />
+      <code path="src/workflows/GameTestPipeline.ts" kind="workflow" symbol="GameTestPipeline" lines="1-428" reason="Workflow orchestration for 4-phase test execution. Input interface, phase execution, retry logic, timeout enforcement." />
+      <code path="src/agents/TestAgent.ts" kind="durable-object" symbol="TestAgent" lines="1-2200" reason="TestAgent Durable Object implementation. Browser automation, phase execution, WebSocket broadcasting, state management." />
+      <code path="src/shared/types.ts" kind="types" symbol="Interfaces and Types" lines="1-367" reason="Shared TypeScript types: TestRun, EvaluationScore, TestEvent, SubmitTestRequest, TestRunSummary, TestReport, etc." />
+      <code path="wrangler.toml" kind="configuration" symbol="Cloudflare Configuration" lines="1-54" reason="Cloudflare Workers configuration: bindings for D1, R2, Browser Rendering, AI Gateway, Workflows, Durable Objects. Production deployment settings." />
+      <code path="package.json" kind="manifest" symbol="Dependencies" lines="1-27" reason="Project dependencies: @browserbasehq/stagehand, @cloudflare/playwright, zod. Scripts: dev, deploy, lint, types." />
+      <code path="README.md" kind="documentation" symbol="README" lines="1-111" reason="Existing README.md with project overview, quick start, setup requirements. Needs update for production deployment and comprehensive documentation." />
+      <code path="src/shared/helpers/d1.ts" kind="helper" symbol="D1 Query Helpers" reason="D1 database query helpers for test_runs, evaluation_scores, test_events tables." />
+      <code path="src/shared/helpers/r2.ts" kind="helper" symbol="R2 Storage Helpers" reason="R2 bucket helpers for uploading screenshots, logs, retrieving artifacts." />
+      <code path="src/shared/helpers/ai-gateway.ts" kind="helper" symbol="AI Gateway Wrapper" reason="AI Gateway request wrapper for routing AI requests with fallback logic." />
+    </code>
+    <dependencies>
+      <dependency ecosystem="node">
+        <package name="@browserbasehq/stagehand" version="^2.5.0" />
+        <package name="@cloudflare/playwright" version="^1.0.0" />
+        <package name="@cloudflare/puppeteer" version="latest" />
+        <package name="zod" version="3.25.67" />
+        <package name="zod-to-json-schema" version="^3.24.6" />
+        <package name="typescript" version="latest" />
+        <package name="wrangler" version="latest" />
+      </dependency>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="ADR-001">RPC-only architecture: No exposed HTTP REST APIs. All internal communication via service bindings (Workflow, TestAgent DO). Dashboard Worker RPC methods only.</constraint>
+    <constraint source="ADR-005">Direct Wrangler Deploy: Use `wrangler deploy` for production. No CI/CD pipeline. Rollback via `wrangler rollback`. Staging/production via `--env` flag.</constraint>
+    <constraint source="Deployment Architecture">Global distribution automatic: 300+ Cloudflare edge locations. No additional configuration needed.</constraint>
+    <constraint source="Security">No secrets in code or client-side JavaScript. All secrets via Wrangler CLI (`wrangler secret put`). Environment variables in wrangler.toml vars section only.</constraint>
+    <constraint source="Consistency Rules">Naming conventions: Database snake_case, TypeScript camelCase/PascalCase, R2 paths lowercase hyphen-separated. Error handling: User-friendly messages, no stack traces.</constraint>
+    <constraint source="Documentation Standards">README.md follows standard open-source project structure. USAGE.md provides user-facing documentation separate from developer documentation.</constraint>
+    <constraint source="Project Structure">Documentation in project root: README.md, USAGE.md. Architecture docs in docs/architecture/. Reference existing patterns.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Dashboard Worker RPC Methods" kind="RPC service binding" signature="submitTest(gameUrl: string, inputSchema?: string): Promise&lt;SubmitTestResponse&gt; | listTests(limit?: number): Promise&lt;TestRunSummary[]&gt; | getTestReport(testId: string): Promise&lt;TestReport&gt; | exportTestJSON(testId: string): Promise&lt;string&gt;" path="src/workers/dashboard.ts" />
+    <interface name="Workflow Service Binding" kind="service binding" signature="env.WORKFLOW.create().run({ testRunId: string, gameUrl: string, inputSchema?: string })" path="src/workflows/GameTestPipeline.ts" />
+    <interface name="TestAgent DO RPC" kind="service binding" signature="env.TEST_AGENT.get(id).fetch(request): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts" />
+    <interface name="GameTestPipelineInput" kind="TypeScript interface" signature="interface GameTestPipelineInput { testRunId: string; gameUrl: string; inputSchema?: string; }" path="src/workflows/GameTestPipeline.ts" />
+    <interface name="SubmitTestRequest" kind="TypeScript interface" signature="interface SubmitTestRequest { gameUrl: string; inputSchema?: string; }" path="src/shared/types.ts" />
+    <interface name="TestRunSummary" kind="TypeScript interface" signature="interface TestRunSummary { id: string; url: string; status: string; phase?: string; progress: number; overallScore?: number; createdAt: number; completedAt?: number; duration?: number; }" path="src/shared/types.ts" />
+    <interface name="TestReport" kind="TypeScript interface" signature="interface TestReport { id: string; url: string; status: string; overallScore: number; metrics: MetricScore[]; screenshots: ScreenshotMetadata[]; events: TestEvent[]; consoleLogs: string[]; networkErrors: NetworkError[]; timestamps: { createdAt: number; completedAt: number; duration: number; }; aiModel?: string; }" path="src/shared/types.ts" />
+  </interfaces>
+
+  <tests>
+    <standards>Manual testing and documentation review. Production deployment validation with example game. Integration testing validates all components work together in production environment. No automated tests required for deployment story - focus on manual verification and documentation completeness.</standards>
+    <locations>No new test files created. Manual testing performed in production environment. Documentation review ensures README.md and USAGE.md completeness and accuracy.</locations>
+    <ideas>
+      <test idea="AC-1">Verify Dashboard Worker accessible at production URL, all RPC methods functional, HTML/CSS/JS served correctly</test>
+      <test idea="AC-2">Verify TestAgent DO deployed, Durable Objects binding configured, instances can be created and accessed</test>
+      <test idea="AC-3">Verify Workflow deployed, service binding configured, workflow can be triggered via Dashboard Worker</test>
+      <test idea="AC-4">Verify all production bindings configured correctly: D1, R2, Browser Rendering, AI Gateway accessible</test>
+      <test idea="AC-5">Verify production secrets configured via Wrangler, no secrets exposed in code or client-side JavaScript</test>
+      <test idea="AC-6">Review README.md for completeness: project overview, architecture, setup, deployment, environment variables, RPC documentation</test>
+      <test idea="AC-7">Review USAGE.md for completeness: how to submit tests, interpret scores, input schema format, troubleshooting</test>
+      <test idea="AC-8">Verify custom domain configured (if applicable), DNS records set up, SSL certificate configured</test>
+      <test idea="AC-9">Test production deployment end-to-end: submit example game, verify test executes, dashboard displays results, WebSocket updates work</test>
+    </ideas>
+  </tests>
+</story-context>
+

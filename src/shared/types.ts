@@ -360,3 +360,22 @@ export interface TestRunSummary {
   duration?: number;
 }
 
+/**
+ * WebSocket message format for real-time progress updates (Story 3.3)
+ * Sent from TestAgent DO to Dashboard frontend via WebSocket
+ */
+export interface WebSocketMessage {
+  /** Message type: status change, progress update, completion, or error */
+  type: 'status' | 'progress' | 'complete' | 'error';
+  /** Current test phase (phase1-phase4) for phase transitions */
+  phase?: string;
+  /** Test status (queued, running, completed, failed) for status changes */
+  status?: string;
+  /** Human-readable progress message */
+  message: string;
+  /** Message timestamp (Unix epoch in milliseconds) */
+  timestamp: number;
+  /** Additional data (e.g., score for completion, error details) */
+  data?: any;
+}
+

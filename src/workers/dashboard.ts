@@ -7,7 +7,7 @@
  */
 
 import type { SubmitTestRequest, SubmitTestResponse, TestRunSummary } from '../shared/types';
-import { listRecentTests, getTestEvents } from '../shared/helpers/d1';
+import { listRecentTests, getTestEvents, createTestRun } from '../shared/helpers/d1';
 
 /**
  * Sanitize error messages (Story 2.7)
@@ -93,6 +93,35 @@ export default {
       }
     }
 
+    // Route: Handle RPC connectToTest endpoint (Story 3.3 AC2)
+    // Returns WebSocket URL for frontend to connect
+    if (url.pathname === '/rpc/connectToTest' && request.method === 'POST') {
+      try {
+        const body = await request.json() as { testRunId: string };
+        const wsUrl = `wss://${url.host}/ws?testId=${body.testRunId}`;
+        return Response.json({ wsUrl });
+      } catch (error) {
+        console.error('RPC connectToTest error:', error);
+        return Response.json(
+          { error: sanitizeErrorMessage(error) },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Route: Handle WebSocket upgrade for real-time updates (Story 3.3)
+    if (url.pathname === '/ws' && request.headers.get('Upgrade') === 'websocket') {
+      try {
+        return await handleWebSocketUpgrade(env, request, url);
+      } catch (error) {
+        console.error('WebSocket upgrade error:', error);
+        return Response.json(
+          { error: sanitizeErrorMessage(error) },
+          { status: 400 }
+        );
+      }
+    }
+
     // 404 for all other routes
     return new Response('Not Found', { status: 404 });
   },
@@ -138,6 +167,13 @@ async function submitTest(
 
   // Generate testRunId using crypto.randomUUID()
   const testRunId = crypto.randomUUID();
+
+  // Create test run record in database with 'queued' status
+  const createResult = await createTestRun(env.DB, testRunId, gameUrl, inputSchema);
+  if (!createResult.success) {
+    console.error('Failed to create test run in database:', createResult.error);
+    throw new Error('Failed to create test run. Please try again.');
+  }
 
   // Trigger Workflow via service binding
   // Note: Workflow runs automatically when created with params (no separate .run() method exists)
@@ -244,6 +280,62 @@ async function listTests(env: Env): Promise<TestRunSummary[]> {
   }
 
   return summaries;
+}
+
+/**
+ * Handle WebSocket upgrade request for real-time test updates
+ * Story 3.3: WebSocket Connection for Live Updates
+ * 
+ * Validates testRunId, connects to TestAgent DO via RPC service binding,
+ * creates WebSocketPair, and forwards messages between TestAgent and frontend.
+ * 
+ * @param env - Environment bindings (TEST_AGENT DO binding)
+ * @param request - WebSocket upgrade request
+ * @param url - Parsed URL with query parameters
+ * @returns WebSocket upgrade response
+ * @throws Error if testRunId invalid or TestAgent DO connection fails
+ */
+async function handleWebSocketUpgrade(
+  env: Env,
+  request: Request,
+  url: URL
+): Promise<Response> {
+  // Extract testId from query parameter
+  const testId = url.searchParams.get('testId');
+  
+  if (!testId) {
+    return new Response('Missing testId query parameter', { status: 400 });
+  }
+
+  // Validate testId is valid UUID format
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(testId)) {
+    return new Response('Invalid testId format (must be UUID)', { status: 400 });
+  }
+
+  try {
+    // Get TestAgent DO instance using testId as DO name
+    // Note: idFromName() accepts any string (including UUIDs with dashes)
+    const testAgentId = env.TEST_AGENT.idFromName(testId);
+    const testAgent = env.TEST_AGENT.get(testAgentId);
+
+    // Forward the ORIGINAL WebSocket upgrade request to TestAgent DO
+    // This preserves all WebSocket handshake headers (Sec-WebSocket-Key, etc.)
+    // so the browser can complete the handshake properly
+    const testAgentResponse = await testAgent.fetch(request);
+
+    // Check if TestAgent DO returned a WebSocket upgrade response
+    if (testAgentResponse.status !== 101) {
+      throw new Error('TestAgent DO failed to upgrade WebSocket connection');
+    }
+
+    // Return the WebSocket upgrade response from TestAgent DO
+    // The webSocket from TestAgent DO is already connected to the client
+    return testAgentResponse;
+  } catch (error) {
+    console.error('WebSocket connection to TestAgent DO failed:', error);
+    throw new Error('Failed to establish WebSocket connection. Test may not exist or has completed.');
+  }
 }
 
 /**
@@ -589,6 +681,110 @@ function getHTML(): string {
       display: block;
     }
 
+    /* Live Feed Styles (Story 3.3) */
+    .live-feed-section {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #3a3a3a;
+    }
+
+    .live-feed-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      padding: 8px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      transition: background 0.2s ease;
+    }
+
+    .live-feed-toggle:hover {
+      background: #333;
+    }
+
+    .live-feed-toggle-text {
+      font-weight: 600;
+      color: #FF6B35;
+      font-size: 0.9em;
+    }
+
+    .live-feed-toggle-icon {
+      font-size: 0.8em;
+      color: #b0b0b0;
+      transition: transform 0.2s ease;
+    }
+
+    .live-feed-toggle.expanded .live-feed-toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .live-feed-container {
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 10px;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 4px;
+      border: 1px solid #3a3a3a;
+    }
+
+    .live-feed-container.expanded {
+      display: block;
+    }
+
+    .live-feed-empty {
+      text-align: center;
+      color: #888;
+      padding: 20px;
+      font-size: 0.9em;
+    }
+
+    .live-feed-message {
+      padding: 8px;
+      margin-bottom: 6px;
+      border-left: 3px solid #FF6B35;
+      background: #222;
+      border-radius: 3px;
+      font-size: 0.85em;
+      line-height: 1.4;
+    }
+
+    .live-feed-timestamp {
+      color: #888;
+      font-size: 0.8em;
+      margin-right: 8px;
+    }
+
+    .live-feed-text {
+      color: #d0d0d0;
+    }
+
+    .live-feed-websocket-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-left: 8px;
+      background: #888;
+    }
+
+    .live-feed-websocket-indicator.connected {
+      background: #4CAF50;
+      animation: pulse 2s infinite;
+    }
+
+    .live-feed-websocket-indicator.connecting {
+      background: #FFC107;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
     /* Responsive layout for desktop */
     @media (min-width: 768px) {
       .container {
@@ -772,6 +968,26 @@ function getHTML(): string {
 
         // Trigger immediate test list refresh
         pollTestList();
+        
+        // Auto-expand Live Feed for the new test after a short delay (wait for render)
+        setTimeout(() => {
+          console.log('Auto-expanding Live Feed for test:', data.testId);
+          expandedLiveFeeds.add(data.testId);
+          const toggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${data.testId}"]\`);
+          const container = document.getElementById(\`live-feed-\${data.testId}\`);
+          console.log('Found toggle:', !!toggle, 'container:', !!container);
+          if (toggle && container) {
+            toggle.classList.add('expanded');
+            container.classList.add('expanded');
+            console.log('Expanded Live Feed, connecting WebSocket...');
+            // Connect WebSocket immediately
+            if (!webSocketConnections.has(data.testId)) {
+              connectWebSocket(data.testId);
+            }
+          } else {
+            console.warn('Could not find Live Feed elements for test:', data.testId);
+          }
+        }, 500);
       } catch (error) {
         // Display error result
         result.classList.add('active', 'error');
@@ -831,6 +1047,13 @@ function getHTML(): string {
       return 'score-low';
     }
 
+    // Track which Live Feeds are expanded (preserve state across re-renders)
+    const expandedLiveFeeds = new Set();
+    // Track which test details are expanded (preserve state across re-renders)
+    const expandedDetails = new Set();
+    // Store live feed messages per test (preserve across re-renders)
+    const liveFeedContents = new Map(); // testId -> HTML content
+
     // Render test cards
     function renderTestList(tests) {
       // Hide loading indicator
@@ -846,6 +1069,22 @@ function getHTML(): string {
 
       testListEmpty.style.display = 'none';
 
+      // Save currently expanded Live Feeds AND their contents before re-render
+      const liveFeeds = testListContainer.querySelectorAll('.live-feed-container.expanded');
+      liveFeeds.forEach(feed => {
+        const testId = feed.id.replace('live-feed-', '');
+        expandedLiveFeeds.add(testId);
+        // Save the entire innerHTML of the feed container
+        liveFeedContents.set(testId, feed.innerHTML);
+      });
+
+      // Save currently expanded test details before re-render
+      const detailsSections = testListContainer.querySelectorAll('.test-card-details.expanded');
+      detailsSections.forEach(details => {
+        const testId = details.id.replace('details-', '');
+        expandedDetails.add(testId);
+      });
+
       // Build HTML for test cards
       const cardsHTML = tests.map(test => {
         const relativeTime = formatRelativeTime(test.createdAt);
@@ -859,13 +1098,25 @@ function getHTML(): string {
           <div class="test-card" data-test-id="\${test.id}">
             <div class="test-card-header">
               <div class="test-card-url" title="\${test.url}">\${test.url}</div>
-              <span class="test-card-status status-\${test.status}">\${test.status}</span>
+              <span class="test-card-status status-\${test.status}" id="status-\${test.id}">\${test.status}</span>
             </div>
             <div class="test-card-meta">
-              <span class="test-card-progress">\${progressText}</span>
+              <span class="test-card-progress" id="progress-\${test.id}">\${progressText}</span>
               <span>\${relativeTime}</span>
               \${durationText ? \`<span>\${durationText}</span>\` : ''}
               \${scoreHTML}
+            </div>
+            <div class="live-feed-section">
+              <div class="live-feed-toggle" data-test-id="\${test.id}" onclick="toggleLiveFeed('\${test.id}')">
+                <span class="live-feed-toggle-text">
+                  Live Feed
+                  <span class="live-feed-websocket-indicator" id="ws-indicator-\${test.id}"></span>
+                </span>
+                <span class="live-feed-toggle-icon">▼</span>
+              </div>
+              <div class="live-feed-container" id="live-feed-\${test.id}">
+                <!-- Messages will be appended here by WebSocket, oldest at top -->
+              </div>
             </div>
             <div class="test-card-details" id="details-\${test.id}">
               <p><strong>Test ID:</strong> \${test.id}</p>
@@ -877,13 +1128,49 @@ function getHTML(): string {
 
       testListContainer.innerHTML = cardsHTML;
 
-      // Add click handlers for expansion
+      // Restore expanded state and messages for Live Feeds
+      expandedLiveFeeds.forEach(testId => {
+        const toggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${testId}"]\`);
+        const container = document.getElementById(\`live-feed-\${testId}\`);
+        if (toggle && container) {
+          toggle.classList.add('expanded');
+          container.classList.add('expanded');
+          
+          // Restore the saved messages
+          const savedContent = liveFeedContents.get(testId);
+          if (savedContent) {
+            container.innerHTML = savedContent;
+          }
+        }
+      });
+
+      // Restore expanded state for test details
+      expandedDetails.forEach(testId => {
+        const details = document.getElementById(\`details-\${testId}\`);
+        if (details) {
+          details.classList.add('expanded');
+        }
+      });
+
+      // Add click handlers for test details expansion
       const cards = testListContainer.querySelectorAll('.test-card');
       cards.forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
+          // Don't toggle details if clicking on Live Feed toggle
+          if (e.target.closest('.live-feed-toggle')) {
+            return;
+          }
+          
           const testId = card.getAttribute('data-test-id');
           const details = document.getElementById(\`details-\${testId}\`);
-          details.classList.toggle('expanded');
+          
+          if (details.classList.contains('expanded')) {
+            details.classList.remove('expanded');
+            expandedDetails.delete(testId);
+          } else {
+            details.classList.add('expanded');
+            expandedDetails.add(testId);
+          }
         });
       });
     }
@@ -916,6 +1203,268 @@ function getHTML(): string {
       if (pollingInterval) {
         clearInterval(pollingInterval);
       }
+    });
+
+    // WebSocket Connection Management (Story 3.3)
+    const webSocketConnections = new Map(); // testId -> WebSocket
+    const reconnectionAttempts = new Map(); // testId -> attempt count
+    const reconnectionTimeouts = new Map(); // testId -> timeout ID
+    const MAX_RECONNECTION_ATTEMPTS = 10;
+    const RECONNECTION_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000]; // Exponential backoff up to 30s
+
+    // Toggle live feed visibility
+    function toggleLiveFeed(testId) {
+      const toggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${testId}"]\`);
+      const container = document.getElementById(\`live-feed-\${testId}\`);
+      
+      if (toggle && container) {
+        const isExpanding = !container.classList.contains('expanded');
+        
+        toggle.classList.toggle('expanded');
+        container.classList.toggle('expanded');
+
+        // Track expanded state
+        if (isExpanding) {
+          expandedLiveFeeds.add(testId);
+          // If expanded and WebSocket not connected, try to connect
+          if (!webSocketConnections.has(testId)) {
+            connectWebSocket(testId);
+          }
+        } else {
+          expandedLiveFeeds.delete(testId);
+        }
+      }
+    }
+
+    // Connect WebSocket for a test
+    function connectWebSocket(testId) {
+      // Don't reconnect if already connected
+      if (webSocketConnections.has(testId)) {
+        return;
+      }
+
+      const indicator = document.getElementById(\`ws-indicator-\${testId}\`);
+      if (indicator) {
+        indicator.classList.add('connecting');
+      }
+
+      try {
+        // Create WebSocket connection
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(\`\${protocol}//\${window.location.host}/ws?testId=\${testId}\`);
+
+        ws.onopen = () => {
+          console.log(\`WebSocket connected for test \${testId}\`);
+          webSocketConnections.set(testId, ws);
+          reconnectionAttempts.set(testId, 0); // Reset reconnection attempts
+
+          // Update indicator
+          if (indicator) {
+            indicator.classList.remove('connecting');
+            indicator.classList.add('connected');
+          }
+
+          // Add connection message to live feed
+          addLiveFeedMessage(testId, 'Connected to live updates', 'status');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            handleWebSocketMessage(testId, message);
+          } catch (error) {
+            console.error('Failed to parse WebSocket message:', error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error(\`WebSocket error for test \${testId}:\`, error);
+        };
+
+        ws.onclose = () => {
+          console.log(\`WebSocket closed for test \${testId}\`);
+          webSocketConnections.delete(testId);
+
+          // Update indicator
+          if (indicator) {
+            indicator.classList.remove('connected', 'connecting');
+          }
+
+          // Attempt reconnection if test is still running
+          const statusElement = document.getElementById(\`status-\${testId}\`);
+          const status = statusElement ? statusElement.textContent : null;
+          
+          if (status && (status === 'queued' || status === 'running')) {
+            attemptReconnection(testId);
+          }
+        };
+      } catch (error) {
+        console.error(\`Failed to create WebSocket for test \${testId}:\`, error);
+        
+        // Update indicator
+        if (indicator) {
+          indicator.classList.remove('connecting', 'connected');
+        }
+
+        // Fallback to polling (already running)
+        addLiveFeedMessage(testId, 'Using polling for updates (WebSocket unavailable)', 'status');
+      }
+    }
+
+    // Attempt WebSocket reconnection with exponential backoff
+    function attemptReconnection(testId) {
+      const attempts = reconnectionAttempts.get(testId) || 0;
+
+      if (attempts >= MAX_RECONNECTION_ATTEMPTS) {
+        console.log(\`Max reconnection attempts reached for test \${testId}\`);
+        addLiveFeedMessage(testId, 'Reconnection failed. Using polling for updates.', 'status');
+        return;
+      }
+
+      // Calculate delay with exponential backoff
+      const delayIndex = Math.min(attempts, RECONNECTION_DELAYS.length - 1);
+      const delay = RECONNECTION_DELAYS[delayIndex];
+
+      console.log(\`Reconnecting to test \${testId} in \${delay}ms (attempt \${attempts + 1})\`);
+
+      // Clear any existing timeout
+      const existingTimeout = reconnectionTimeouts.get(testId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      // Schedule reconnection
+      const timeoutId = setTimeout(() => {
+        reconnectionAttempts.set(testId, attempts + 1);
+        reconnectionTimeouts.delete(testId);
+        connectWebSocket(testId);
+      }, delay);
+
+      reconnectionTimeouts.set(testId, timeoutId);
+    }
+
+    // Handle incoming WebSocket message
+    function handleWebSocketMessage(testId, message) {
+      console.log(\`WebSocket message for test \${testId}:\`, message);
+
+      // Update status badge if status changed
+      if (message.type === 'status' && message.status) {
+        updateStatusBadge(testId, message.status);
+      }
+
+      // Update progress indicator if phase changed
+      if (message.phase) {
+        updateProgressIndicator(testId, message.phase);
+      }
+
+      // Add message to live feed
+      if (message.message) {
+        addLiveFeedMessage(testId, message.message, message.type);
+      }
+
+      // Handle completion
+      if (message.type === 'complete') {
+        // Close WebSocket connection
+        const ws = webSocketConnections.get(testId);
+        if (ws) {
+          ws.close();
+          webSocketConnections.delete(testId);
+        }
+
+        // Update indicator
+        const indicator = document.getElementById(\`ws-indicator-\${testId}\`);
+        if (indicator) {
+          indicator.classList.remove('connected', 'connecting');
+        }
+      }
+    }
+
+    // Update status badge in real-time
+    function updateStatusBadge(testId, status) {
+      const statusElement = document.getElementById(\`status-\${testId}\`);
+      if (statusElement) {
+        statusElement.textContent = status;
+        statusElement.className = \`test-card-status status-\${status}\`;
+      }
+    }
+
+    // Update progress indicator in real-time
+    function updateProgressIndicator(testId, phase) {
+      const progressElement = document.getElementById(\`progress-\${testId}\`);
+      if (progressElement) {
+        const phaseNumber = phase.replace('phase', '');
+        progressElement.textContent = \`Phase \${phaseNumber}/4\`;
+      }
+    }
+
+    // Add message to live feed (check for duplicates, keep all messages)
+    function addLiveFeedMessage(testId, message, type = 'progress') {
+      const container = document.getElementById(\`live-feed-\${testId}\`);
+
+      if (!container) {
+        return;
+      }
+
+      const timestamp = new Date().toLocaleTimeString();
+      
+      // Check if this exact message already exists (prevent duplicates)
+      const existingMessages = container.querySelectorAll('.live-feed-message');
+      for (const existing of existingMessages) {
+        const existingText = existing.querySelector('.live-feed-text')?.textContent;
+        const existingTime = existing.querySelector('.live-feed-timestamp')?.textContent;
+        if (existingText === message && existingTime === timestamp) {
+          return; // Duplicate, don't add
+        }
+      }
+
+      // Create message element
+      const messageElement = document.createElement('div');
+      messageElement.className = 'live-feed-message';
+      
+      messageElement.innerHTML = \`
+        <span class="live-feed-timestamp">\${timestamp}</span>
+        <span class="live-feed-text">\${message}</span>
+      \`;
+
+      // Prepend to top (newest at top, scrollable)
+      container.insertBefore(messageElement, container.firstChild);
+
+      // Keep scroll at top to show newest message
+      container.scrollTop = 0;
+    }
+
+    // Auto-connect WebSockets for active tests (AC5: no polling delay for status updates)
+    function connectActiveTestWebSockets(tests) {
+      tests.forEach(test => {
+        // Connect for queued or running tests that don't have a connection yet
+        if ((test.status === 'queued' || test.status === 'running') && !webSocketConnections.has(test.id)) {
+          console.log('Auto-connecting WebSocket for ' + test.status + ' test: ' + test.id);
+          connectWebSocket(test.id);
+        }
+      });
+    }
+
+    // Enhance renderTestList to auto-connect WebSockets for active tests
+    const originalRenderTestList = renderTestList;
+    renderTestList = function(tests) {
+      originalRenderTestList(tests);
+      // Auto-connect for real-time status updates (AC5)
+      connectActiveTestWebSockets(tests);
+    };
+
+    // Clean up WebSocket connections and timeouts when page unloads
+    window.addEventListener('beforeunload', () => {
+      // Close all WebSocket connections
+      webSocketConnections.forEach((ws) => {
+        ws.close();
+      });
+      webSocketConnections.clear();
+
+      // Clear all reconnection timeouts
+      reconnectionTimeouts.forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+      reconnectionTimeouts.clear();
     });
   </script>
 </body>

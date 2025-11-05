@@ -1,0 +1,120 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3.4</storyId>
+    <title>Detailed Test Report View</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-4-detailed-test-report-view.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>game developer</asA>
+    <iWant>to view comprehensive test results with visual evidence</iWant>
+    <soThat>I can understand quality issues and fix them</soThat>
+    <tasks>
+      <task id="1">Implement getTestReport() RPC Method (AC: 2)</task>
+      <task id="2">Implement exportTestJSON() RPC Method (AC: 6)</task>
+      <task id="3">Add TestReport Type Definitions (AC: 2, 6)</task>
+      <task id="4">Implement Detailed Report UI Component (AC: 1, 2, 7)</task>
+      <task id="5">Implement Screenshot Gallery Component (AC: 3, 4)</task>
+      <task id="6">Implement Console Error Log Component (AC: 2, 5)</task>
+      <task id="7">Implement Network Error Log Component (AC: 2)</task>
+      <task id="8">Implement Frontend getTestReport() Call and Rendering (AC: 1, 2)</task>
+      <task id="9">Implement Export JSON Functionality (AC: 6)</task>
+      <task id="10">Add Integration Testing</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Click test run card to expand inline (no separate page): Clicking a test run card expands an inline section showing detailed test report, replacing the placeholder content from Story 3.2</criterion>
+    <criterion id="2">Expanded view shows all required elements: Large overall quality score (0-100) with color coding (green >70, yellow 50-70, red <50), 5 individual metric scores with progress bars (load, visual, controls, playability, technical), AI justification text for each metric (2-3 sentences), Timeline of AI actions with timestamps (chronological list of test_events), Screenshot gallery (grid layout, click to enlarge), Expandable console error log (if errors found), Expandable network error log (if failures found), Test duration and timestamp, AI model used for evaluation</criterion>
+    <criterion id="3">Screenshots display with captions: Each screenshot shows phase and action description (e.g., "Phase 2: Discovered WASD controls")</criterion>
+    <criterion id="4">Screenshot lightbox: click to view full-size with prev/next navigation: Clicking a screenshot opens a lightbox modal with full-size image, previous/next navigation buttons, and close button</criterion>
+    <criterion id="5">Console errors syntax highlighted (if applicable): Console error log displays with syntax highlighting for JavaScript errors (optional enhancement)</criterion>
+    <criterion id="6">"Export JSON" button downloads full test report: Export button downloads complete TestReport JSON including all metadata, scores, events, and artifact URLs</criterion>
+    <criterion id="7">Collapse button to close expanded view: Collapse button or clicking outside expanded view closes the detailed report section</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-3-live-dashboard-real-time-updates-mvp-complete.md" title="Epic 3: Live Dashboard &amp; Real-Time Updates" section="Story 3.4: Detailed Test Report View" snippet="Story 3.4 implements the detailed test report view that displays comprehensive test results when users click on a test run card. Includes overall quality scores, individual metric breakdowns with AI justifications, a timeline of AI actions, screenshot galleries, console/network error logs, and JSON export functionality." />
+      <doc path="docs/epic-3-tech-context.md" title="Epic Technical Specification: Live Dashboard &amp; Real-Time Updates" section="Story 3.4: Detailed Test Report View Flow" snippet="Defines the complete flow for detailed test report view: Frontend calls getTestReport() RPC, Dashboard Worker queries D1 (test_runs, evaluation_scores, test_events) and R2 (screenshots, logs), joins data into TestReport object, returns JSON, frontend renders all sections." />
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="4.5 Test Report Output" snippet="FR-5.1: Report MUST be viewable directly in dashboard. FR-5.2: Report MUST include overall quality score, individual metric scores with justifications, timeline of AI actions, key screenshots, console error log, failed network requests, test duration. FR-5.3: Report MUST support exporting as JSON. FR-5.4: Screenshots MUST be viewable inline with captions. FR-5.5: Report MUST indicate which AI model was used." />
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.4 Data Models" snippet="R2 Storage Structure: tests/{test-id}/screenshots/{timestamp}-{phase}-{description}.png and tests/{test-id}/logs/{log_type}.log. Evidence capture pattern with screenshots stored immediately during gameplay." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-001: Monorepo with RPC-Only Architecture" snippet="Dashboard Worker uses RPC service bindings exclusively, no REST API endpoints exposed. All internal communication via service bindings, no CORS concerns. Test report data fetched via getTestReport() RPC method." />
+      <doc path="docs/architecture/data-architecture.md" title="Data Architecture" section="R2 Storage Structure" snippet="R2 bucket structure: tests/{test-uuid}/screenshots/{timestamp}-{phase}-{action}.png and tests/{test-uuid}/logs/{console|network|agent-decisions}.log. Objects have public read access for dashboard viewing." />
+    </docs>
+    <code>
+      <artifact path="src/workers/dashboard.ts" kind="service" symbol="Dashboard Worker" lines="1-938" reason="Main Dashboard Worker file that serves HTML/CSS/JS and handles RPC methods. Story 3.4 adds getTestReport() and exportTestJSON() RPC methods, updates getHTML() to include detailed report UI components and JavaScript." />
+      <artifact path="src/shared/types.ts" kind="types" symbol="TypeScript Type Definitions" lines="1-382" reason="Shared type definitions. Story 3.4 adds TestReport, MetricScore, ScreenshotMetadata, TestEvent, NetworkError interfaces. Existing types: TestRun, EvaluationScore, TestEvent, MetricScore, NetworkError, TestRunSummary, WebSocketMessage." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="D1 Database Helper Functions" lines="1-280" reason="Helper functions for D1 queries: getTestById(), getEvaluationScores(), getTestEvents(). Story 3.4 uses these functions to query test_runs, evaluation_scores, and test_events tables for detailed report." />
+      <artifact path="src/shared/helpers/r2.ts" kind="helper" symbol="R2 Storage Helper Functions" lines="1-372" reason="Helper functions for R2 operations: getTestArtifacts(), getPublicUrl(), parseScreenshotMetadata(). Story 3.4 uses getTestArtifacts() to retrieve screenshots and logs, getPublicUrl() to generate public URLs for dashboard viewing." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="listRecentTests()" lines="77-98" reason="Lists recent test runs ordered by creation time. Used by Story 3.2 for test list display. Story 3.4 follows similar pattern for getTestReport() querying." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="getTestEvents()" lines="191-212" reason="Gets all events for a test run ordered by timestamp. Story 3.4 uses this to retrieve timeline of AI actions for detailed report." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="getEvaluationScores()" lines="257-278" reason="Gets all evaluation scores for a test run. Story 3.4 uses this to retrieve 5 metric scores with justifications for detailed report." />
+      <artifact path="src/workers/dashboard.ts" kind="service" symbol="submitTest()" lines="67-80" reason="RPC method for submitting test runs. Story 3.4 follows same pattern for getTestReport() and exportTestJSON() RPC methods: route handler in fetch(), separate function for business logic, error handling with sanitizeErrorMessage()." />
+      <artifact path="src/workers/dashboard.ts" kind="service" symbol="listTests()" lines="82-94" reason="RPC method for listing test runs (Story 3.2). Story 3.4 follows same pattern for getTestReport() RPC method: route handler, D1 query, error handling." />
+      <artifact path="src/workers/dashboard.ts" kind="service" symbol="sanitizeErrorMessage()" lines="17-49" reason="Error sanitization helper function. Story 3.4 uses this for error handling in getTestReport() and exportTestJSON() RPC methods." />
+      <artifact path="tests/story-3.2-test-run-list.test.ts" kind="test" symbol="Integration Tests" lines="1-" reason="Integration test file for Story 3.2. Story 3.4 should create similar integration test file (story-3.4-detailed-test-report.test.ts) following same testing patterns." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@browserbasehq/stagehand" version="^2.5.0" />
+        <package name="@cloudflare/playwright" version="^1.0.0" />
+        <package name="@cloudflare/puppeteer" version="latest" />
+        <package name="zod" version="3.25.67" />
+        <package name="zod-to-json-schema" version="^3.24.6" />
+        <package name="typescript" version="latest" />
+        <package name="wrangler" version="latest" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-001: Monorepo with RPC-Only Architecture - Dashboard Worker uses RPC service bindings exclusively, no REST API endpoints exposed. Test report data fetched via getTestReport() RPC method.</constraint>
+    <constraint>Data Query Pattern: Dashboard Worker queries D1 for test_runs, evaluation_scores, test_events tables and R2 for screenshots and logs. Join queries combine data into TestReport object.</constraint>
+    <constraint>R2 Evidence Access: Screenshots and logs retrieved via R2 signed URLs or public bucket access. Dashboard Worker generates signed URLs if bucket not public using getPublicUrl() helper.</constraint>
+    <constraint>Frontend-Backend Unity: All UI logic in same Worker, no CORS concerns. Detailed report HTML/CSS/JS inline in Dashboard Worker response (no separate static directory needed).</constraint>
+    <constraint>Error Handling Pattern: All RPC methods catch errors and return user-friendly messages (never expose stack traces). Use sanitizeErrorMessage() helper from Story 3.1.</constraint>
+    <constraint>RPC Method Pattern: Route handler in fetch() method, separate function for business logic, error handling with sanitizeErrorMessage(). Follow same pattern as submitTest() and listTests().</constraint>
+    <constraint>Type Definitions: Add TestReport, MetricScore, ScreenshotMetadata, TestEvent, NetworkError interfaces to src/shared/types.ts following existing type definition patterns.</constraint>
+    <constraint>D1 Query Patterns: Use existing helper functions (getTestById(), getEvaluationScores(), getTestEvents()) from src/shared/helpers/d1.ts for consistency.</constraint>
+    <constraint>R2 Query Patterns: Use existing helper functions (getTestArtifacts(), getPublicUrl()) from src/shared/helpers/r2.ts for consistency.</constraint>
+    <constraint>UI Design Patterns: Maintain Cloudflare design patterns (orange accents, monospace fonts, gradient dark background) from Story 3.1 and 3.2.</constraint>
+    <constraint>Test Run Card Component: Replace placeholder expanded content from Story 3.2 with complete detailed report implementation. Enhance existing card click handler to load and render detailed test report.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="getTestReport() RPC Method" kind="function signature" signature="GET /rpc/getTestReport?testId={testId}: Promise&lt;TestReport&gt;" path="src/workers/dashboard.ts" />
+    <interface name="exportTestJSON() RPC Method" kind="function signature" signature="GET /rpc/exportTestJSON?testId={testId}: Promise&lt;string&gt; (JSON file download)" path="src/workers/dashboard.ts" />
+    <interface name="TestReport Interface" kind="TypeScript interface" signature="interface TestReport { id: string; url: string; inputSchema?: string; status: string; overallScore: number; metrics: MetricScore[]; screenshots: ScreenshotMetadata[]; events: TestEvent[]; consoleLogs: string[]; networkErrors: NetworkError[]; timestamps: { createdAt: number; completedAt: number; duration: number }; aiModel?: string; }" path="src/shared/types.ts" />
+    <interface name="MetricScore Interface" kind="TypeScript interface" signature="interface MetricScore { name: string; score: number; justification: string; }" path="src/shared/types.ts" />
+    <interface name="ScreenshotMetadata Interface" kind="TypeScript interface" signature="interface ScreenshotMetadata { url: string; phase: string; description: string; timestamp: number; }" path="src/shared/types.ts" />
+    <interface name="TestEvent Interface" kind="TypeScript interface" signature="interface TestEvent { id: number; test_run_id: string; phase: string; event_type: string; description: string; timestamp: number; metadata?: string; }" path="src/shared/types.ts" />
+    <interface name="NetworkError Interface" kind="TypeScript interface" signature="interface NetworkError { timestamp: number; url: string; status?: number; error: string; }" path="src/shared/types.ts" />
+    <interface name="getTestById() Helper" kind="function signature" signature="getTestById(db: D1Database, id: string): Promise&lt;DbResult&lt;TestRun | null&gt;&gt;" path="src/shared/helpers/d1.ts" />
+    <interface name="getEvaluationScores() Helper" kind="function signature" signature="getEvaluationScores(db: D1Database, testRunId: string): Promise&lt;DbResult&lt;EvaluationScore[]&gt;&gt;" path="src/shared/helpers/d1.ts" />
+    <interface name="getTestEvents() Helper" kind="function signature" signature="getTestEvents(db: D1Database, testRunId: string): Promise&lt;DbResult&lt;TestEvent[]&gt;&gt;" path="src/shared/helpers/d1.ts" />
+    <interface name="getTestArtifacts() Helper" kind="function signature" signature="getTestArtifacts(r2: R2Bucket, testId: string, env: Env): Promise&lt;DbResult&lt;TestArtifact[]&gt;&gt;" path="src/shared/helpers/r2.ts" />
+    <interface name="getPublicUrl() Helper" kind="function signature" signature="getPublicUrl(key: string, env: Env): string" path="src/shared/helpers/r2.ts" />
+  </interfaces>
+
+  <tests>
+    <standards>Unit Testing: Test getTestReport() queries D1 and R2 correctly, test exportTestJSON() serializes correctly, test frontend rendering functions. Integration Testing: Test Dashboard Worker returns complete test report, test screenshot gallery displays correctly, test lightbox navigation works, test export JSON downloads correctly. Manual Testing: Test detailed report displays in browser, verify all sections render correctly, test screenshot lightbox, test export functionality, test error handling. Error Handling Tests: Test test report fetch failures, test R2 access failures, test invalid testId, test partial data display. Follow existing test patterns from Story 3.2 integration tests.</standards>
+    <locations>tests/story-3.4-detailed-test-report.test.ts (create new file following pattern from tests/story-3.2-test-run-list.test.ts)</locations>
+    <ideas>
+      <idea criterion="AC-1">Test clicking test run card expands inline detailed report (no page navigation)</idea>
+      <idea criterion="AC-2">Test expanded view shows all required elements: overall score, 5 metric scores with progress bars, justifications, timeline, screenshot gallery, console/network error logs, metadata</idea>
+      <idea criterion="AC-3">Test screenshots display with captions showing phase and action description</idea>
+      <idea criterion="AC-4">Test screenshot lightbox opens with full-size image, prev/next navigation, close button, keyboard navigation</idea>
+      <idea criterion="AC-5">Test console error log displays with syntax highlighting (if applicable)</idea>
+      <idea criterion="AC-6">Test export JSON button downloads complete TestReport JSON file</idea>
+      <idea criterion="AC-7">Test collapse button closes expanded view, test click-outside closes view (if implemented)</idea>
+      <idea criterion="Error Handling">Test getTestReport() with invalid testId returns error, test R2 access failures handled gracefully, test partial data display (test with no screenshots, no errors)</idea>
+      <idea criterion="Integration">Test complete flow: Click test run card → Detailed report loads → All sections display correctly → Screenshot lightbox works → Export JSON downloads</idea>
+    </ideas>
+  </tests>
+</story-context>
+

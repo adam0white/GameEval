@@ -1,0 +1,140 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3.5</storyId>
+    <title>Example Game Testing and Validation</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-5-example-game-testing-and-validation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>to test GameEval with real DOM-based example games</iWant>
+    <soThat>I validate the system works end-to-end before launch</soThat>
+    <tasks>
+      <task id="1" title="Prepare Example Game URLs and Input Schema" ac="1,9">
+        Identify 3-5 DOM-based example games, verify URLs accessible, create input schema JSON for at least one game, document in test plan
+      </task>
+      <task id="2" title="Validate Game Loading" ac="2">
+        Submit games through dashboard, monitor status, verify Phase 1 completes successfully, check D1 events, verify screenshots in R2
+      </task>
+      <task id="3" title="Validate Control Discovery" ac="3">
+        Monitor Phase 2 execution, verify interactive elements discovered, check test_events, verify screenshots showing controls
+      </task>
+      <task id="4" title="Validate Autonomous Gameplay" ac="4">
+        Monitor Phase 3 execution, verify 1-3 minute duration, check test_events for actions, verify agent performs clicks/keyboard input
+      </task>
+      <task id="5" title="Validate Screenshot Capture" ac="5">
+        Check R2 storage for screenshots, verify minimum 5 screenshots per test, check dashboard gallery display, test lightbox navigation
+      </task>
+      <task id="6" title="Validate Quality Score Generation" ac="6">
+        Monitor Phase 4 execution, verify overall score and 5 metric scores generated, check justifications in D1, verify dashboard display
+      </task>
+      <task id="7" title="Validate Dashboard Display" ac="7">
+        Verify test list appearance, status updates, progress indicators, detailed report sections, export JSON functionality
+      </task>
+      <task id="8" title="Validate WebSocket Real-Time Updates" ac="8">
+        Monitor WebSocket connection, verify phase transitions broadcast, verify Live Feed messages, test reconnection, verify fallback to polling
+      </task>
+      <task id="9" title="Validate Input Schema Handling" ac="9">
+        Submit game with input schema, verify schema stored in D1, verify agent uses schema for control discovery, verify schema in report
+      </task>
+      <task id="10" title="Test Error Handling" ac="10">
+        Submit invalid URLs, verify user-friendly error messages, verify failed status with error message, check error_message in D1
+      </task>
+      <task id="11" title="Document Edge Cases and Issues" ac="11">
+        Create markdown file documenting bugs and edge cases, categorize by component and priority, include reproduction steps
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criteria id="1">Test with 3-5 example DOM-based games (provided by user) - Submit different game URLs covering different genres and control schemes</criteria>
+    <criteria id="2">Validate: TestAgent successfully loads each game - Each game URL loads successfully, no 404 errors, no blank pages, Phase 1 completes successfully</criteria>
+    <criteria id="3">Validate: Control discovery finds interactive elements - Phase 2 discovers at least one interactive element, screenshots show discovered controls</criteria>
+    <criteria id="4">Validate: Agent plays each game autonomously for 1-3 minutes - Phase 3 executes successfully, agent performs autonomous actions, test runs for 1-3 minutes per game</criteria>
+    <criteria id="5">Validate: Minimum 5 screenshots captured per test - Each test run captures at least 5 screenshots stored in R2, screenshots visible in dashboard detailed report</criteria>
+    <criteria id="6">Validate: Quality scores generated with justifications - Phase 4 completes successfully, overall quality score generated, all 5 individual metric scores generated with 2-3 sentence justifications, scores stored in D1</criteria>
+    <criteria id="7">Validate: Dashboard displays results correctly - Test run appears in dashboard test list, status updates correctly, detailed report view shows all sections, WebSocket updates work in real-time</criteria>
+    <criteria id="8">Validate: WebSocket updates work in real-time - WebSocket connection established, phase transitions broadcast in real-time, progress messages appear in Live Feed section, status badge updates without polling delay</criteria>
+    <criteria id="9">Test with input schema provided (for at least 1 game) - Submit at least one game with input schema JSON, verify agent uses schema to guide control discovery, verify schema appears in test report metadata</criteria>
+    <criteria id="10">Test error handling: submit invalid URL, test graceful failures - Submit invalid URL (non-HTTP, malformed), verify user-friendly error message displayed, verify test run status shows "Failed" status with error message</criteria>
+    <criteria id="11">Document any edge cases discovered for post-MVP fixes - Document any bugs, edge cases, or unexpected behaviors in a markdown file or GitHub issues, categorize issues (critical, major, minor), prioritize for Epic 4</criteria>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-3-live-dashboard-real-time-updates-mvp-complete.md" title="Epic 3: Live Dashboard & Real-Time Updates" section="Story 3.5" snippet="As a developer, I want to test GameEval with real DOM-based example games, so that I validate the system works end-to-end before launch. Story 3.5 is a critical validation story that tests the entire GameEval system with real DOM-based games before production deployment."/>
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="FR-2.5 Error Handling & Agent Resilience" snippet="Agent Retry Logic, Alternative Strategies, User Interaction Detection, Timeout Recovery, Graceful Degradation, AI Model Fallback, Fail-Safe Error Messages"/>
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="FR-6.1-FR-6.3 Evidence Storage" snippet="All screenshots stored in R2 under tests/{test_id}/screenshots/, console logs stored as tests/{test_id}/logs/console.log, network logs stored as tests/{test_id}/logs/network.log"/>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-001" snippet="Monorepo with RPC-Only Architecture - All internal communication via RPC service bindings (no exposed HTTP APIs). Validation tests all RPC service bindings."/>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-006" snippet="WebSocket for Real-Time Updates, Polling as Fallback - Validation tests WebSocket connection and real-time message delivery, with fallback to polling if WebSocket unavailable."/>
+      <doc path="docs/architecture/implementation-patterns.md" title="Implementation Patterns" section="RPC Service Binding Pattern" snippet="All internal communication via RPC: No HTTP REST APIs. Binding access through env parameter. Dashboard Worker calling Workflow, Workflow calling TestAgent DO."/>
+      <doc path="docs/epic-1-context.md" title="Epic 1 Technical Context" section="8. Test Strategy" snippet="Manual testing in Cloudflare dashboard + wrangler dev local environment. Integration testing for workflow orchestration and service bindings. End-to-end testing for full workflow execution."/>
+    </docs>
+    <code>
+      <code path="src/workers/dashboard.ts" kind="worker" symbol="submitTest" lines="125-172" reason="RPC method for submitting test requests - validates URL and inputSchema, generates UUID, triggers Workflow. Validation verifies this method works correctly with real game URLs."/>
+      <code path="src/workers/dashboard.ts" kind="worker" symbol="listTests" lines="185-260" reason="RPC method for listing recent test runs - queries D1 for test_runs, calculates progress from test_events. Validation verifies test list displays correctly with real test data."/>
+      <code path="src/workers/dashboard.ts" kind="worker" symbol="handleWebSocketUpgrade" lines="275-318" reason="WebSocket upgrade handler for real-time updates - connects to TestAgent DO via RPC. Validation verifies WebSocket messages broadcast correctly during real test execution."/>
+      <code path="src/agents/TestAgent.ts" kind="durable-object" symbol="runPhase1" lines="268-312" reason="Phase 1 execution - loads game, validates load, detects interaction requirements. Validation verifies Phase 1 completes successfully for real games."/>
+      <code path="src/agents/TestAgent.ts" kind="durable-object" symbol="runPhase2" lines="458-503" reason="Phase 2 execution - discovers interactive controls using Stagehand observe(). Validation verifies control discovery finds interactive elements for real games."/>
+      <code path="src/agents/TestAgent.ts" kind="durable-object" symbol="runPhase3" lines="811-853" reason="Phase 3 execution - autonomous gameplay exploration using Stagehand Computer Use mode. Validation verifies agent plays games autonomously for 1-3 minutes."/>
+      <code path="src/agents/TestAgent.ts" kind="durable-object" symbol="runPhase4" lines="1339-1384" reason="Phase 4 execution - evaluation and scoring using AI Gateway vision model. Validation verifies quality scores generated with justifications for real games."/>
+      <code path="src/agents/TestAgent.ts" kind="durable-object" symbol="captureScreenshot" lines="2092-2121" reason="Screenshot capture helper - saves screenshots to R2. Validation verifies minimum 5 screenshots captured per test and visible in dashboard."/>
+      <code path="src/workflows/GameTestPipeline.ts" kind="workflow" symbol="run" lines="44-237" reason="Workflow orchestration - executes 4-phase test pipeline with retry logic. Validation verifies workflow completes successfully with real games."/>
+      <code path="src/shared/types.ts" kind="types" symbol="TestRunSummary" lines="342-361" reason="Type definition for test run summary data displayed in dashboard. Validation verifies dashboard displays this data correctly."/>
+      <code path="src/shared/types.ts" kind="types" symbol="Phase4Result" lines="250-257" reason="Type definition for Phase 4 evaluation results. Validation verifies quality scores match this structure."/>
+      <code path="src/shared/types.ts" kind="types" symbol="MetricScore" lines="238-245" reason="Type definition for individual metric scores with justifications. Validation verifies all 5 metrics have scores and justifications."/>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@browserbasehq/stagehand" version="^2.5.0"/>
+        <package name="@cloudflare/playwright" version="^1.0.0"/>
+        <package name="@cloudflare/puppeteer" version="latest"/>
+        <package name="zod" version="3.25.67"/>
+        <package name="zod-to-json-schema" version="^3.24.6"/>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>RPC-only architecture - All communication via service bindings, no exposed HTTP APIs. Validation must verify RPC methods work correctly.</constraint>
+    <constraint>Error handling pattern - All error scenarios must return user-friendly messages (never expose stack traces). Validation ensures graceful failures with clear error messages.</constraint>
+    <constraint>Evidence storage pattern - Screenshots stored in R2 under tests/{testId}/screenshots/, logs under tests/{testId}/logs/. Validation verifies correct storage structure and accessibility.</constraint>
+    <constraint>Test execution pattern - Each test run executes 4-phase workflow (Load → Control Discovery → Gameplay → Evaluation). Validation ensures all phases complete successfully.</constraint>
+    <constraint>WebSocket real-time updates - WebSocket connection for real-time progress, polling as fallback. Validation tests WebSocket connection and message delivery.</constraint>
+    <constraint>No code changes required - This is a pure validation story. All code exists from previous stories. Validation only tests existing functionality.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="submitTest RPC" kind="RPC method" signature="submitTest(gameUrl: string, inputSchema?: string): Promise&lt;SubmitTestResponse&gt;" path="src/workers/dashboard.ts"/>
+    <interface name="listTests RPC" kind="RPC method" signature="listTests(): Promise&lt;TestRunSummary[]&gt;" path="src/workers/dashboard.ts"/>
+    <interface name="handleWebSocketUpgrade RPC" kind="RPC method" signature="handleWebSocketUpgrade(env: Env, request: Request, url: URL): Promise&lt;Response&gt;" path="src/workers/dashboard.ts"/>
+    <interface name="TestAgent.runPhase1" kind="RPC method" signature="runPhase1(): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts"/>
+    <interface name="TestAgent.runPhase2" kind="RPC method" signature="runPhase2(): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts"/>
+    <interface name="TestAgent.runPhase3" kind="RPC method" signature="runPhase3(): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts"/>
+    <interface name="TestAgent.runPhase4" kind="RPC method" signature="runPhase4(hasPartialEvidence?: boolean): Promise&lt;Response&gt;" path="src/agents/TestAgent.ts"/>
+    <interface name="GameTestPipeline.run" kind="Workflow entrypoint" signature="run(event: WorkflowEvent&lt;GameTestPipelineInput&gt;, step: WorkflowStep): Promise&lt;{status: string; message: string; testRunId: string}&gt;" path="src/workflows/GameTestPipeline.ts"/>
+  </interfaces>
+
+  <tests>
+    <standards>Manual validation testing - This story is primarily manual QA validation. No automated tests created. Execute manual QA checklist to validate all components work together correctly with real DOM-based games. Test end-to-end user journey: submit URL → watch AI test game → view results → export report. Validate error handling scenarios with invalid URLs and graceful failures. Document all edge cases and bugs discovered during validation for Epic 4 fixes.</standards>
+    <locations>Manual testing in Cloudflare dashboard and wrangler dev local environment. Integration testing validates all components (Dashboard Worker, TestAgent DO, Workflow, D1, R2, Browser Rendering, AI Gateway) work together. End-to-end testing validates complete user journey. Error scenario testing validates error handling with invalid URLs.</locations>
+    <ideas>
+      <test id="ac-1" ac="1">Submit 3-5 different DOM-based game URLs through dashboard, covering different genres (puzzle, action, strategy) and control schemes</test>
+      <test id="ac-2" ac="2">Monitor each test run, verify Phase 1 completes successfully with no 404 errors or blank pages, check test_events table for Phase 1 events</test>
+      <test id="ac-3" ac="3">Monitor Phase 2 execution, verify at least one interactive element discovered, check screenshots showing discovered controls</test>
+      <test id="ac-4" ac="4">Monitor Phase 3 execution, verify test runs for 1-3 minutes, check test_events for multiple Phase 3 actions, verify agent performs autonomous actions</test>
+      <test id="ac-5" ac="5">Check R2 storage for screenshots under tests/{testId}/screenshots/, verify minimum 5 screenshots per test, check dashboard gallery displays screenshots</test>
+      <test id="ac-6" ac="6">Monitor Phase 4 execution, verify overall score and 5 metric scores generated, check evaluation_scores table for justifications, verify dashboard displays scores</test>
+      <test id="ac-7" ac="7">Verify test run appears in dashboard test list, status updates correctly (Queued → Running → Completed), detailed report shows all sections, export JSON works</test>
+      <test id="ac-8" ac="8">Monitor WebSocket connection, verify phase transitions broadcast in real-time, verify Live Feed messages appear, test reconnection if connection drops</test>
+      <test id="ac-9" ac="9">Submit game with input schema JSON, verify schema stored in test_runs.input_schema, verify agent uses schema for control discovery, verify schema in report</test>
+      <test id="ac-10" ac="10">Submit invalid URLs (non-HTTP, malformed, 404), verify user-friendly error messages displayed, verify test run status shows "Failed" with error message</test>
+      <test id="ac-11" ac="11">Document all bugs, edge cases, and unexpected behaviors in docs/validation/edge-cases-epic-3.md, categorize by component and priority (P0-P3)</test>
+    </ideas>
+  </tests>
+</story-context>
+
