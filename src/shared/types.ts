@@ -336,3 +336,27 @@ export interface SubmitTestResponse {
   testId: string;
 }
 
+/**
+ * Summary information for a test run in the dashboard list (Story 3.2)
+ */
+export interface TestRunSummary {
+  /** Test run UUID */
+  id: string;
+  /** Game URL being tested */
+  url: string;
+  /** Test status (queued, running, completed, failed) */
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  /** Current test phase (phase1-phase4) if running */
+  phase?: 'phase1' | 'phase2' | 'phase3' | 'phase4';
+  /** Progress indicator (1-4 representing phases completed) */
+  progress: number;
+  /** Overall quality score (0-100) if completed */
+  overallScore?: number;
+  /** Test creation timestamp (Unix epoch in milliseconds) */
+  createdAt: number;
+  /** Test completion timestamp (Unix epoch in milliseconds) if completed */
+  completedAt?: number;
+  /** Test duration in milliseconds (if completed) */
+  duration?: number;
+}
+

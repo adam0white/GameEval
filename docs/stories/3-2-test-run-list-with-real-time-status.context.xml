@@ -1,0 +1,113 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3.2</storyId>
+    <title>Test Run List with Real-Time Status</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-2-test-run-list-with-real-time-status.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>game developer</asA>
+    <iWant>to see a live-updating list of test runs with their status</iWant>
+    <soThat>I can track multiple tests and see progress</soThat>
+    <tasks>
+- Task 1: Implement listTests RPC Method (AC: 2, 4)
+- Task 2: Add Test Run List UI to Dashboard HTML (AC: 1, 8)
+- Task 3: Implement Test Run Card Component (AC: 3, 5)
+- Task 4: Implement Frontend Polling Logic (AC: 2, 7)
+- Task 5: Implement Test Run Card Click Handler (AC: 6)
+- Task 6: Add TestRunSummary Type Definition (AC: 2)
+- Task 7: Add Integration Testing
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+1. Test run list displayed below submission form
+2. Polls Dashboard Worker's RPC method listTests() every 3 seconds for updates (simple polling for MVP)
+3. Each test run card shows: Game URL (truncated with tooltip on hover), Status badge (Queued, Running, Completed, Failed) with color coding, Progress indicator showing current phase (1/4, 2/4, 3/4, 4/4), Start time (relative: "2 minutes ago"), Duration (if completed), Overall quality score (if completed, with color: green &gt;70, yellow 50-70, red &lt;50)
+4. Test runs sorted by newest first
+5. Status badge colors: gray (queued), blue (running), green (completed), red (failed)
+6. Click test run card to expand inline for detailed report
+7. Loading state while polling
+8. Empty state message: "No tests yet. Submit a game URL to get started!"
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-3-live-dashboard-real-time-updates-mvp-complete.md" title="Epic 3: Live Dashboard &amp; Real-Time Updates" section="Story 3.2: Test Run List with Real-Time Status" snippet="As a game developer, I want to see a live-updating list of test runs with their status, So that I can track multiple tests and see progress. Polls Dashboard Worker's RPC method listTests() every 3 seconds for updates (simple polling for MVP)." />
+      <doc path="docs/epic-3-tech-context.md" title="Epic Technical Specification: Live Dashboard &amp; Real-Time Updates" section="Story 3.2: Test Run List with Real-Time Status (Polling)" snippet="RPC method listTests() returns: array of {id, url, status, phase, score, timestamps}. Query D1: SELECT from test_runs ORDER BY created_at DESC LIMIT 50. Use CSS transitions for smooth updates. Progress indicator: show Phase 2/4 based on latest test_events entry." />
+      <doc path="docs/prd/4-functional-requirements.md" title="Functional Requirements" section="4.1 Web Dashboard" snippet="Dashboard MUST display a list of test runs showing: Game URL (truncated with tooltip), Status (Queued, Running, Completed, Failed), Progress percentage, Start time, Duration, Overall quality score (when complete). Dashboard MUST update test status in real-time without manual refresh (polling interval: 2-5 seconds recommended)." />
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-001: Monorepo with RPC-Only Architecture" snippet="Use single Workers repository handling frontend and backend, with all internal communication via RPC service bindings (no exposed HTTP APIs). Simplifies deployment, reduces network overhead, improves security, easier to maintain type safety." />
+      <doc path="docs/architecture/data-architecture.md" title="Data Architecture" section="D1 Database Schema" snippet="test_runs table: id, url, input_schema, status, overall_score, created_at, updated_at, completed_at. test_events table: id, test_run_id, phase, event_type, description, timestamp, metadata. evaluation_scores table: id, test_run_id, metric_name, score, justification, created_at." />
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.3 Service Communication Pattern" snippet="Workers-Only Architecture: Dashboard Worker serves UI HTML/CSS/JS, accepts URL submissions, triggers Workflows. No exposed REST API: Dashboard submits URLs directly to Workflow via Service Bindings. Real-time updates: Agents push updates to dashboard via WebSockets." />
+    </docs>
+    <code>
+      <artifact path="src/workers/dashboard.ts" kind="worker" symbol="fetch, submitTest, getHTML" lines="1-516" reason="Dashboard Worker file from Story 3.1. Extend with listTests() RPC method and test list UI. Follows existing RPC pattern with route handler and business logic separation." />
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="listRecentTests, getTestEvents" lines="77-98, 191-212" reason="D1 helper functions for querying test_runs and test_events. listRecentTests() queries test_runs ordered by created_at DESC. getTestEvents() retrieves events for a test run to calculate progress." />
+      <artifact path="src/shared/types.ts" kind="type" symbol="TestRun, TestEvent, SubmitTestRequest, SubmitTestResponse" lines="17-26, 43-51, 324-337" reason="Type definitions for test data structures. Need to add TestRunSummary interface for listTests() response. Existing types: TestRun, TestEvent, EvaluationScore." />
+      <artifact path="src/shared/constants.ts" kind="constant" symbol="TABLE_NAMES, Phase, LogType" reason="Table name constants and enums used by D1 helpers. TABLE_NAMES.TEST_RUNS, TABLE_NAMES.TEST_EVENTS referenced in queries." />
+    </code>
+    <dependencies>
+      <node>
+        <package name="@cloudflare/playwright" version="^1.0.0" />
+        <package name="@cloudflare/puppeteer" version="latest" />
+        <package name="@browserbasehq/stagehand" version="^2.5.0" />
+        <package name="zod" version="3.25.67" />
+        <package name="typescript" version="latest" />
+        <package name="wrangler" version="latest" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+- **ADR-001**: RPC-Only Architecture - All communication via service bindings, no REST API endpoints. listTests() must be RPC method via GET /rpc/listTests endpoint.
+- **Dashboard Worker Pattern**: HTML/CSS/JS served inline from Worker, no separate static hosting. Test list UI must be embedded in getHTML() function.
+- **Polling Pattern**: Simple polling every 3 seconds for MVP (WebSocket enhancement deferred to Story 3.3).
+- **UI Consistency**: Maintain Cloudflare design patterns from Story 3.1: orange accents (#FF6B35), monospace fonts, gradient dark background, clean minimal interface.
+- **Error Handling**: Use sanitizeErrorMessage() helper from Story 3.1 for user-friendly error messages. Never expose stack traces or internal error codes.
+- **D1 Query Pattern**: Use existing helper functions from src/shared/helpers/d1.ts (listRecentTests, getTestEvents). Follow DbResult&lt;T&gt; error handling pattern.
+- **Type Safety**: Add TestRunSummary interface to src/shared/types.ts following existing pattern (SubmitTestRequest, SubmitTestResponse).
+- **Testing**: Follow existing test patterns from Story 3.1 tests (tests/story-3.1-dashboard-worker.test.ts). Test RPC method, UI rendering, polling logic, error handling.
+  </constraints>
+
+  <interfaces>
+    <interface name="listTests() RPC Method" kind="rpc-endpoint" signature="GET /rpc/listTests?limit=50" path="src/workers/dashboard.ts">
+Returns TestRunSummary[] array. Query D1 for test_runs ordered by created_at DESC LIMIT 50. For each test run, query test_events to determine current phase and progress. Calculate duration from timestamps. Format response with id, url, status, phase, progress, overallScore, createdAt, completedAt, duration.
+    </interface>
+    <interface name="TestRunSummary" kind="typescript-interface" signature="interface TestRunSummary { id: string; url: string; status: 'queued' | 'running' | 'completed' | 'failed'; phase?: 'phase1' | 'phase2' | 'phase3' | 'phase4'; progress: number; overallScore?: number; createdAt: number; completedAt?: number; duration?: number; }" path="src/shared/types.ts">
+Type definition for test list data returned by listTests() RPC method. Used by Dashboard Worker and frontend JavaScript for rendering test run cards.
+    </interface>
+    <interface name="listRecentTests() Helper" kind="function" signature="async function listRecentTests(db: D1Database, limit: number): Promise&lt;DbResult&lt;TestRun[]&gt;&gt;" path="src/shared/helpers/d1.ts">
+D1 helper function that queries test_runs table ordered by created_at DESC with LIMIT. Returns DbResult wrapper for error handling. Used by listTests() RPC method.
+    </interface>
+    <interface name="getTestEvents() Helper" kind="function" signature="async function getTestEvents(db: D1Database, testRunId: string): Promise&lt;DbResult&lt;TestEvent[]&gt;&gt;" path="src/shared/helpers/d1.ts">
+D1 helper function that queries test_events table for a specific test_run_id, ordered by timestamp ASC. Used to calculate current phase and progress indicator (1/4, 2/4, 3/4, 4/4).
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Follow existing test patterns from Story 3.1: Manual testing via Wrangler dev mode for UI, integration tests for RPC endpoints and D1 queries. Test RPC method with valid/invalid D1 data, test progress calculation logic, test status badge color logic. Test Dashboard Worker serves test list, test D1 query integration, test polling updates UI correctly, test error handling. Manual testing: verify polling updates test list every 3 seconds, test status badge colors change correctly, test progress indicator updates, test empty state message. Error handling tests: D1 query failures, network failures during polling, invalid JSON response.
+    </standards>
+    <locations>
+- tests/story-3.1-dashboard-worker.test.ts (existing test file pattern to follow)
+- Manual testing via browser with wrangler dev
+    </locations>
+    <ideas>
+- AC-1: Test test run list displays below submission form in HTML
+- AC-2: Test polling calls GET /rpc/listTests every 3 seconds, verify setInterval() behavior
+- AC-3: Test test run card displays all required fields (URL, status, progress, time, score), verify URL truncation and tooltip, verify status badge color coding, verify progress indicator (1/4, 2/4, 3/4, 4/4), verify relative time formatting, verify score color coding (green/yellow/red)
+- AC-4: Test D1 query orders results by created_at DESC
+- AC-5: Test status badge colors: gray (queued), blue (running), green (completed), red (failed)
+- AC-6: Test clicking test run card expands inline section, test collapse functionality
+- AC-7: Test loading state displays while fetching data, test loading state hides after data received
+- AC-8: Test empty state message displays when test list is empty
+- Integration: Test complete flow: Submit test → Test appears in list → Status updates as test progresses, test multiple tests display correctly, test polling updates in real-time
+- Error handling: Test D1 query failures, test network failures during polling, test invalid JSON response
+    </ideas>
+  </tests>
+</story-context>
+

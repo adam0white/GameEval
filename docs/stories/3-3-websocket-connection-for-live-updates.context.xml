@@ -1,0 +1,159 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3</storyId>
+    <title>WebSocket Connection for Live Updates</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-3-websocket-connection-for-live-updates.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>game developer</asA>
+    <iWant>to see real-time updates as the AI tests my game</iWant>
+    <soThat>I understand what's happening without manual refresh</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Implement WebSocket Connection Handler in Dashboard Worker</task>
+      <task id="2" ac="2">Add RPC Method for WebSocket Connection</task>
+      <task id="3" ac="4,5,6">Implement Frontend WebSocket Client</task>
+      <task id="4" ac="3,4,5">Implement WebSocket Message Parsing and UI Updates</task>
+      <task id="5" ac="7">Implement Automatic WebSocket Reconnection</task>
+      <task id="6" ac="8">Implement Polling Fallback</task>
+      <task id="7" ac="1,2">Add WebSocket Type Definitions</task>
+      <task id="8" ac="6">Update Test Run Card UI for Live Feed</task>
+      <task id="9">Add Integration Testing</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Dashboard connects to TestAgent DO via WebSocket (using Agents SDK WebSocket API)</ac>
+    <ac id="2">Connection established through RPC call to Dashboard Worker: `connectToTest(testRunId)`</ac>
+    <ac id="3">TestAgent broadcasts updates via WebSocket: Phase transitions, Progress messages, Action updates, Completion</ac>
+    <ac id="4">Dashboard receives WebSocket messages and updates UI instantly</ac>
+    <ac id="5">Status badge updates in real-time (no polling delay)</ac>
+    <ac id="6">Progress messages shown in expandable "Live Feed" section per test</ac>
+    <ac id="7">WebSocket reconnects automatically if connection drops</ac>
+    <ac id="8">Fallback to polling if WebSocket unavailable</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics/epic-3-live-dashboard-real-time-updates-mvp-complete.md" title="Epic 3: Live Dashboard &amp; Real-Time Updates" section="Story 3.3: WebSocket Connection for Live Updates">
+        Story 3.3 acceptance criteria: Dashboard connects to TestAgent DO via WebSocket, connection established through RPC, TestAgent broadcasts updates, Dashboard receives messages and updates UI instantly, status badge updates in real-time, progress messages shown in expandable Live Feed section, WebSocket reconnects automatically, fallback to polling if unavailable.
+      </doc>
+      <doc path="docs/epic-3-tech-context.md" title="Epic Technical Specification: Live Dashboard &amp; Real-Time Updates" section="Story 3.3: WebSocket Connection for Live Updates Flow">
+        Communication flow: Dashboard opens WebSocket connection to TestAgent via Worker proxy, TestAgent broadcasts events during execution (phase transitions, progress updates, action updates, completion), Dashboard updates UI in real-time, on disconnect Dashboard reconnects automatically with fallback to polling.
+      </doc>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-006: WebSocket for Real-Time Updates, Polling as Fallback">
+        Use Agents SDK WebSocket API for real-time progress updates, with 3-second polling as fallback if WebSocket unavailable. Rate limit WebSocket messages (max 1 per 5 seconds) to avoid spam.
+      </doc>
+      <doc path="docs/architecture/novel-pattern-designs.md" title="Novel Pattern Designs" section="Pattern 2: Event-Driven Progress Streaming (WebSocket)">
+        TestAgent WebSocket Handler maintains list of connected clients. Event schema: TestProgressEvent with testId, phase, status, progress, message, timestamp, optional evidence. Dashboard connects to TestAgent DO WebSocket via RPC service binding, forwards messages to frontend. Events are fire-and-forget, rate limit max 1 event per 5 seconds.
+      </doc>
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="6.3 Service Communication Pattern">
+        Real-time updates: Agents push updates to dashboard via WebSockets (built into Agents SDK). Internal RPC: Workers ↔ Workflows ↔ Agents communicate via Service Bindings only.
+      </doc>
+      <doc path="docs/stories/3-2-test-run-list-with-real-time-status.md" title="Story 3.2: Test Run List with Real-Time Status" section="Dev Notes">
+        Learnings: Dashboard Worker structure, RPC method pattern, polling pattern (setInterval every 3 seconds), frontend JavaScript patterns, test run card component, type definitions, error handling patterns.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/workers/dashboard.ts" kind="worker" symbol="fetch()" lines="54-99" reason="Dashboard Worker entry point - needs WebSocket upgrade handler for /ws?testId={testRunId} path">
+        Current implementation handles /rpc/submitTest and /rpc/listTests. Need to add WebSocket upgrade handler to connect to TestAgent DO.
+      </artifact>
+      <artifact path="src/workers/dashboard.ts" kind="worker" symbol="getHTML()" lines="154-515" reason="Dashboard HTML template - needs WebSocket client JavaScript and Live Feed UI">
+        Current HTML includes form submission and test list. Need to add WebSocket client code and expandable Live Feed section to test run cards.
+      </artifact>
+      <artifact path="src/agents/TestAgent.ts" kind="durable-object" symbol="handleWebSocket()" lines="132-157" reason="TestAgent DO WebSocket handler - already implemented, accepts WebSocket connections">
+        TestAgent DO already has WebSocket support. handleWebSocket() creates WebSocketPair, accepts server socket, adds to websocketClients array, handles close/error events.
+      </artifact>
+      <artifact path="src/agents/TestAgent.ts" kind="durable-object" symbol="broadcastToClients()" lines="1969-1980" reason="TestAgent DO broadcasts messages to connected WebSocket clients">
+        broadcastToClients() sends JSON messages to all connected clients, removes failed clients. Called by updateStatus() method with rate limiting (1 event per 5 seconds).
+      </artifact>
+      <artifact path="src/agents/TestAgent.ts" kind="durable-object" symbol="updateStatus()" lines="1862-1889" reason="TestAgent DO status update method that broadcasts via WebSocket">
+        updateStatus() logs to D1 test_events and broadcasts via WebSocket. Rate limited to 1 event per 5 seconds. Message format: { type: 'progress', phase, message, timestamp }.
+      </artifact>
+      <artifact path="src/shared/types.ts" kind="types" symbol="TestRunSummary" lines="342-361" reason="Test run summary type - needs WebSocketMessage type added">
+        TestRunSummary interface used for test list. Need to add WebSocketMessage interface for WebSocket message format between TestAgent and Dashboard.
+      </artifact>
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="listRecentTests()" reason="D1 helper for test list - used by polling fallback">
+        listRecentTests() queries D1 for recent test runs. Used by Story 3.2 polling implementation, will be used as fallback when WebSocket unavailable.
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@browserbasehq/stagehand" version="^2.5.0"/>
+        <package name="@cloudflare/playwright" version="^1.0.0"/>
+        <package name="@cloudflare/puppeteer" version="latest"/>
+        <package name="zod" version="3.25.67"/>
+        <package name="zod-to-json-schema" version="^3.24.6"/>
+      </ecosystem>
+      <ecosystem name="dev">
+        <package name="typescript" version="latest"/>
+        <package name="wrangler" version="latest"/>
+        <package name="@types/node" version="^24.10.0"/>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>ADR-001: Monorepo with RPC-Only Architecture - Dashboard Worker uses RPC service bindings exclusively, no REST API endpoints exposed. WebSocket connection established via RPC call to TestAgent DO.</constraint>
+    <constraint>ADR-006: WebSocket for Real-Time Updates, Polling as Fallback - Use Agents SDK WebSocket API for real-time updates, with 3-second polling as fallback if WebSocket unavailable. Rate limit WebSocket messages (max 1 per 5 seconds).</constraint>
+    <constraint>Pattern 2: Event-Driven Progress Streaming - TestAgent maintains array of WebSocket clients, broadcasts events during execution. Events are fire-and-forget (not queued if no listeners).</constraint>
+    <constraint>TestAgent DO WebSocket already implemented - TestAgent DO has handleWebSocket() and broadcastToClients() methods from Story 2.1. No changes needed to TestAgent.ts.</constraint>
+    <constraint>Dashboard Worker extends existing file - Story 3.2 created dashboard.ts with listTests() RPC method. Story 3.3 should extend this file, not create new files.</constraint>
+    <constraint>Frontend JavaScript inline in Worker - All UI logic in same Worker, no separate static hosting. WebSocket client code added to getHTML() function inline JavaScript.</constraint>
+    <constraint>Error handling with sanitizeErrorMessage() - Follow pattern from Story 3.2: use sanitizeErrorMessage() helper for user-friendly error messages in WebSocket connection failures.</constraint>
+    <constraint>Type definitions in shared/types.ts - Follow pattern from Story 3.2: add WebSocketMessage interface to src/shared/types.ts for type safety.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="WebSocketMessage" kind="TypeScript interface" signature="interface WebSocketMessage { type: 'status' | 'progress' | 'complete' | 'error'; phase?: string; status?: string; message: string; timestamp: number; data?: any; }" path="src/shared/types.ts">
+      WebSocket message format between TestAgent DO and Dashboard frontend. Used for real-time progress updates, phase transitions, status changes, and completion notifications.
+    </interface>
+    <interface name="TestAgent.handleWebSocket()" kind="Durable Object method" signature="private handleWebSocket(request: Request): Response" path="src/agents/TestAgent.ts:132-157">
+      TestAgent DO WebSocket handler. Accepts WebSocket upgrade requests, creates WebSocketPair, adds server socket to websocketClients array, handles close/error events. Already implemented in Story 2.1.
+    </interface>
+    <interface name="TestAgent.broadcastToClients()" kind="Durable Object method" signature="private broadcastToClients(message: Record&lt;string, unknown&gt;): void" path="src/agents/TestAgent.ts:1969-1980">
+      TestAgent DO broadcasts messages to all connected WebSocket clients. Sends JSON stringified messages, removes failed clients. Called by updateStatus() with rate limiting.
+    </interface>
+    <interface name="Dashboard Worker WebSocket Endpoint" kind="HTTP endpoint" signature="GET /ws?testId={testRunId}" path="src/workers/dashboard.ts">
+      Dashboard Worker WebSocket upgrade endpoint. Extracts testRunId from query parameter, validates UUID, connects to TestAgent DO via RPC service binding, creates WebSocketPair for client-server connection.
+    </interface>
+    <interface name="Frontend WebSocket Client" kind="Browser WebSocket API" signature="new WebSocket(`wss://${window.location.host}/ws?testId=${testRunId}`)" path="src/workers/dashboard.ts (inline JavaScript)">
+      Frontend WebSocket client. Connects to Dashboard Worker WebSocket endpoint, handles onopen/onmessage/onerror/onclose events, implements automatic reconnection with exponential backoff, falls back to polling if unavailable.
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Unit Testing: Test WebSocket upgrade handler with valid/invalid testRunId, test message parsing, test UI update logic. Integration Testing: Test Dashboard Worker connects to TestAgent DO WebSocket, test messages forwarded correctly, test UI updates in real-time, test reconnection logic, test polling fallback. Manual Testing: Test WebSocket connection in browser, verify messages update UI instantly, test status badge updates in real-time, test live feed displays messages, test reconnection on connection drop, test fallback to polling. Error Handling Tests: Test WebSocket connection failures, test invalid testRunId, test TestAgent DO not found, test network failures during reconnection.
+    </standards>
+    <locations>
+      <location>tests/</location>
+      <location>tests/*integration.test.ts</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test WebSocket connection establishes successfully when valid testRunId provided</idea>
+      <idea ac="2">Test WebSocket connection fails gracefully when TestAgent DO not found</idea>
+      <idea ac="2">Test WebSocket connection fails gracefully when testRunId invalid UUID format</idea>
+      <idea ac="3">Test TestAgent broadcasts phase transition messages via WebSocket</idea>
+      <idea ac="3">Test TestAgent broadcasts progress messages via WebSocket</idea>
+      <idea ac="3">Test TestAgent broadcasts completion message with score via WebSocket</idea>
+      <idea ac="4">Test Dashboard receives WebSocket messages and updates UI instantly (no polling delay)</idea>
+      <idea ac="5">Test status badge updates in real-time when WebSocket message received (queued → running → completed/failed)</idea>
+      <idea ac="6">Test progress messages appear in expandable Live Feed section per test run card</idea>
+      <idea ac="7">Test WebSocket reconnects automatically when connection drops (exponential backoff: 1s, 2s, 4s, 8s, max 30s)</idea>
+      <idea ac="7">Test reconnection stops after test completion or failure</idea>
+      <idea ac="7">Test reconnection stops after maximum 10 attempts</idea>
+      <idea ac="8">Test fallback to polling (3-second interval) when WebSocket unavailable</idea>
+      <idea ac="8">Test switch from polling to WebSocket when connection successfully established</idea>
+      <idea ac="8">Test polling continues if WebSocket never connects</idea>
+      <idea>Test complete flow: Submit test → WebSocket connects → Messages received → UI updates in real-time</idea>
+      <idea>Test WebSocket connection for multiple concurrent tests</idea>
+      <idea>Test error handling: invalid testRunId, TestAgent DO not found, network failures during reconnection</idea>
+    </ideas>
+  </tests>
+</story-context>
+
