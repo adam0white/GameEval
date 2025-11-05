@@ -1,0 +1,215 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>7</storyId>
+    <title>UX Phase 1 - Three-View Architecture with Agent Orange Theme</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-7-ux-phase-1-three-view-architecture-agent-orange.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>game developer</asA>
+    <iWant>a modern, professional dashboard with Card Gallery, Agent Focus Mode, and Agent Orange branding</iWant>
+    <soThat>GameEval feels polished and provides an engaging testing experience</soThat>
+    <tasks>
+      <task id="1" ac="1">Install and Configure shadcn/ui + Tailwind CSS</task>
+      <task id="2" ac="2">Implement Agent Orange Color System</task>
+      <task id="3" ac="3">Configure Tailwind with custom color palette and typography</task>
+      <task id="4" ac="4">Create TestCard Component for Card Gallery</task>
+      <task id="5" ac="4">Implement Card Gallery View Layout</task>
+      <task id="6" ac="5">Create Agent Focus Mode Components</task>
+      <task id="7" ac="5,7">Implement Agent Focus Mode Layout and Navigation</task>
+      <task id="8" ac="6">Install and Configure shadcn/ui Components</task>
+      <task id="9" ac="7">Implement View Toggle (Card/Table) Infrastructure</task>
+      <task id="10" ac="8">Match UX Reference Mockup Styling</task>
+      <task id="11" ac="all">Integration Testing and Validation</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Install and configure shadcn/ui + Tailwind CSS: shadcn/ui installed and configured with Tailwind CSS, components directory structure created (`src/components/ui/`), Tailwind config includes Agent Orange color palette, system fonts configured</ac>
+    <ac id="2">Implement Agent Orange color system: Primary color `#f97316` (Orange 500) for main actions and running states, Primary Dark `#c2410c` (Orange 700) for hover states, Success `#22c55e` (Green 500) for completed tests, Error `#ef4444` (Red 500) for failed tests, Background `#0a0a0a`, Surface `#161616`, Border `#333333`, Tailwind config extended with custom colors</ac>
+    <ac id="3">Configure Tailwind with custom color palette and typography: Tailwind config file updated with Agent Orange colors, typography scale configured (h1: 2rem, h2: 1.5rem, h3: 1.25rem, body: 1rem, small: 0.875rem), system fonts configured (San Francisco, Segoe UI, system-ui)</ac>
+    <ac id="4">Implement Card Gallery View (Default Dashboard): Grid layout for test cards (3 columns desktop, 2 tablet, 1 mobile), TestCard component created with visual status indicator (animated pulse for running), game URL truncated with tooltip, status badge with Agent Orange colors, duration/elapsed time display, quality score (if completed) with color coding, Quick Submit input at top of page (always visible, low friction), empty state message: "No tests yet. Submit a game URL to get started!", click card → Navigate to Agent Focus Mode</ac>
+    <ac id="5">Implement Agent Focus Mode (Immersive Single-Test View): Full-screen layout with back button (returns to Card Gallery), Agent Status Header component with large status summary ("Agent is discovering controls..."), metrics grid: Progress (1/4), Duration (2m 34s), Screenshots (8), Confidence (85%), live pulsing indicator when active, split view layout (desktop): Left 50%: Live Feed Timeline component, Right 50%: Screenshot Gallery component, Live Feed Timeline with timestamp + brief status updates (Gemini-style concise), auto-scroll to latest, color-coded event types, Screenshot Gallery with grid layout, captions, click to open lightbox (fullscreen, keyboard navigation), load as agent captures them, final report display (when complete): Large quality score with color, individual metric scores with progress bars, AI justifications, Export JSON button</ac>
+    <ac id="6">Create custom component library: Use shadcn/ui components: Button, Card, Badge, Input, create custom components: TestCard (for gallery), AgentStatusHeader (for focus mode), LiveFeedTimeline (event stream), ScreenshotGallery (with lightbox), QuickSubmitInput (URL submission)</ac>
+    <ac id="7">Implement navigation and state management: URL routing: `/` (Card Gallery), `/test/:id` (Agent Focus), back button in Focus Mode returns to `/`, auto-open Agent Focus Mode on new test submission, maintain scroll position when returning to gallery, view preference persistence (localStorage) for Card/Table toggle</ac>
+    <ac id="8">Match UX reference mockup styling: Use `docs/ux-reference-mockup.html` as visual reference, match color scheme exactly (Agent Orange theme), match spacing and component styling, follow three-view architecture as specified in UX Design Specification</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/ux-design-specification.md" title="GameEval UX Design Specification" section="Design System Foundation, Design Direction, Component Library, Implementation Guidance">
+        Complete UX design specification with shadcn/ui + Tailwind CSS integration, Agent Orange color system, three-view architecture (Card Gallery, Table View, Agent Focus Mode), component library specifications, and implementation guidance for developers.
+      </doc>
+      <doc path="docs/ux-reference-mockup.html" title="UX Reference Mockup" section="Complete interactive mockup">
+        Interactive HTML mockup showing all three views (Card Gallery, Table View, Agent Focus Mode) with Agent Orange theme, component styling, spacing, and interactions. Use as visual implementation reference.
+      </doc>
+      <doc path="docs/epics/epic-3-live-dashboard-real-time-updates-mvp-complete.md" title="Epic 3: Live Dashboard & Real-Time Updates" section="Story 3.7">
+        Story 3.7 acceptance criteria, technical notes, prerequisites, and design decisions. Establishes UX Phase 1 as MVP enhancement completing Epic 3.
+      </doc>
+      <doc path="docs/architecture/architecture-decision-records-adrs.md" title="Architecture Decision Records" section="ADR-001">
+        ADR-001: Monorepo with RPC-Only Architecture. All internal communication via RPC service bindings, no exposed HTTP APIs. Dashboard Worker serves inline HTML/CSS/JS, no separate frontend build.
+      </doc>
+      <doc path="docs/architecture/api-contracts.md" title="API Contracts" section="Dashboard Worker RPC Methods">
+        RPC method signatures: submitTest(), listTests(), getTestReport(), exportTestJSON(). WebSocket connection patterns for TestAgent DO real-time updates.
+      </doc>
+      <doc path="docs/prd/7-design-considerations.md" title="Design Considerations" section="Dashboard UI/UX">
+        Dashboard UI/UX architecture: Single Worker serves both UI and handles submissions, HTML/CSS/JS delivered directly from Worker, WebSocket connection for real-time updates, Cloudflare design patterns with orange accents.
+      </doc>
+      <doc path="docs/prd/6-technical-architecture.md" title="Technical Architecture" section="Service Communication Pattern">
+        RPC-only architecture pattern, service bindings for internal communication, no REST API endpoints exposed.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/workers/dashboard.ts" kind="worker" symbol="fetch, submitTest, listTests, getTestReport, exportTestJSON" lines="1-2546">
+        Dashboard Worker serving HTML/CSS/JS inline. Contains RPC methods: submitTest() (Story 3.1), listTests() (Story 3.2), getTestReport() (Story 3.4), exportTestJSON() (Story 3.4). HTML generation includes test list, detailed report view, screenshot gallery, lightbox. WebSocket connection handling (Story 3.3). Must be updated to integrate Tailwind CSS, shadcn/ui components, Card Gallery layout, Agent Focus Mode.
+      </artifact>
+      <artifact path="src/shared/types.ts" kind="types" symbol="TestRun, TestReport, TestRunSummary, MetricScore, TestEvent, TestReportScreenshot" lines="1-433">
+        TypeScript type definitions for test runs, reports, events, metrics. TestReport interface includes screenshots, metrics, events, timestamps. Used by Dashboard Worker RPC methods and frontend components.
+      </artifact>
+      <artifact path="src/shared/helpers/d1.ts" kind="helper" symbol="listRecentTests, getTestById, getEvaluationScores, getTestEvents" lines="1-200">
+        D1 database helper functions for querying test_runs, evaluation_scores, test_events tables. Used by Dashboard Worker RPC methods to fetch test data.
+      </artifact>
+      <artifact path="src/shared/helpers/r2.ts" kind="helper" symbol="getTestArtifacts, uploadScreenshot" lines="1-150">
+        R2 storage helper functions for retrieving screenshots and logs. Used by Dashboard Worker to fetch test artifacts for display.
+      </artifact>
+      <artifact path="src/agents/TestAgent.ts" kind="agent" symbol="WebSocket connection, event broadcasting" lines="1-1000">
+        TestAgent Durable Object with WebSocket support for real-time progress updates. Broadcasts events during test execution. Used by Dashboard Worker for live feed in Agent Focus Mode.
+      </artifact>
+      <artifact path="src/workflows/GameTestPipeline.ts" kind="workflow" symbol="GameTestPipeline" lines="1-500">
+        Workflow orchestration for test execution. Triggers TestAgent DO phases. Called by Dashboard Worker submitTest() method.
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@browserbasehq/stagehand" version="^2.5.0" />
+        <package name="@cloudflare/playwright" version="^1.0.0" />
+        <package name="zod" version="3.25.67" />
+        <package name="typescript" version="latest" />
+        <package name="wrangler" version="latest" />
+        <package name="tailwindcss" version="latest" />
+        <package name="postcss" version="latest" />
+        <package name="autoprefixer" version="latest" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>
+      <rule>ADR-001: RPC-Only Architecture</rule>
+      <description>All internal communication via RPC service bindings, no exposed HTTP API endpoints. Dashboard Worker maintains RPC-only communication. All UI logic in same Worker, no separate frontend build.</description>
+      <source>docs/architecture/architecture-decision-records-adrs.md</source>
+    </constraint>
+    <constraint>
+      <rule>Frontend Architecture Decision Required</rule>
+      <description>Current Dashboard Worker serves inline HTML/CSS/JS. Story 3.7 requires decision: Option A (Keep inline HTML, apply Tailwind via CDN or build step, use vanilla JS) OR Option B (Restructure to support React/TypeScript build pipeline, use shadcn/ui with React). Recommendation: Option A for MVP.</description>
+      <source>docs/stories/3-7-ux-phase-1-three-view-architecture-agent-orange.md</source>
+    </constraint>
+    <constraint>
+      <rule>Design System Integration</rule>
+      <description>shadcn/ui + Tailwind CSS must integrate with existing Dashboard Worker HTML structure. Consider Tailwind JIT compilation or CDN approach for inline HTML.</description>
+      <source>docs/stories/3-7-ux-phase-1-three-view-architecture-agent-orange.md</source>
+    </constraint>
+    <constraint>
+      <rule>WebSocket Real-Time Updates</rule>
+      <description>Agent Focus Mode uses existing WebSocket connection from Story 3.3. Live Feed Timeline component must consume WebSocket messages and update UI in real-time.</description>
+      <source>docs/stories/3-7-ux-phase-1-three-view-architecture-agent-orange.md</source>
+    </constraint>
+    <constraint>
+      <rule>RPC Method Compatibility</rule>
+      <description>All existing RPC methods (submitTest(), listTests(), getTestReport(), exportTestJSON()) remain unchanged. New UI components call same RPC methods.</description>
+      <source>docs/stories/3-7-ux-phase-1-three-view-architecture-agent-orange.md</source>
+    </constraint>
+    <constraint>
+      <rule>Component Reuse</rule>
+      <description>Reuse screenshot lightbox implementation from Story 3.4 in ScreenshotGallery component. Reuse TestReport types and RPC methods in Agent Focus Mode final report display.</description>
+      <source>docs/stories/3-7-ux-phase-1-three-view-architecture-agent-orange.md</source>
+    </constraint>
+    <constraint>
+      <rule>Accessibility Requirements</rule>
+      <description>WCAG AA compliance: Keyboard navigation, focus indicators (2px orange outline), ARIA labels, screen reader compatibility, color contrast (4.5:1 for text, 3:1 for UI). shadcn/ui provides accessible primitives.</description>
+      <source>docs/ux-design-specification.md</source>
+    </constraint>
+    <constraint>
+      <rule>Responsive Breakpoints</rule>
+      <description>Desktop (>1024px): 3-column Card Gallery, split view Agent Focus Mode. Tablet (640-1024px): 2-column Card Gallery, stacked Agent Focus Mode. Mobile (&lt;640px): 1-column Card Gallery, stacked Agent Focus Mode.</description>
+      <source>docs/ux-design-specification.md</source>
+    </constraint>
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>submitTest</name>
+      <kind>RPC method</kind>
+      <signature>async submitTest(gameUrl: string, inputSchema?: string): Promise&lt;{ testId: string }&gt;</signature>
+      <path>src/workers/dashboard.ts</path>
+      <reason>RPC method for submitting new test runs. Called by Quick Submit input component in Card Gallery.</reason>
+    </interface>
+    <interface>
+      <name>listTests</name>
+      <kind>RPC method</kind>
+      <signature>async listTests(limit?: number): Promise&lt;TestRunSummary[]&gt;</signature>
+      <path>src/workers/dashboard.ts</path>
+      <reason>RPC method for fetching test run list. Called by Card Gallery to display test cards. Returns array of test summaries with status, phase, score, timestamps.</reason>
+    </interface>
+    <interface>
+      <name>getTestReport</name>
+      <kind>RPC method</kind>
+      <signature>async getTestReport(testId: string): Promise&lt;TestReport&gt;</signature>
+      <path>src/workers/dashboard.ts</path>
+      <reason>RPC method for fetching detailed test report. Called by Agent Focus Mode final report display. Returns complete test data including scores, screenshots, events, logs.</reason>
+    </interface>
+    <interface>
+      <name>exportTestJSON</name>
+      <kind>RPC method</kind>
+      <signature>async exportTestJSON(testId: string): Promise&lt;string&gt;</signature>
+      <path>src/workers/dashboard.ts</path>
+      <reason>RPC method for exporting test report as JSON. Called by Export JSON button in Agent Focus Mode final report display.</reason>
+    </interface>
+    <interface>
+      <name>WebSocket Connection</name>
+      <kind>WebSocket API</kind>
+      <signature>TestAgent DO WebSocket connection via Agents SDK for real-time progress updates</signature>
+      <path>src/agents/TestAgent.ts</path>
+      <reason>WebSocket connection for live updates in Agent Focus Mode. Live Feed Timeline component consumes WebSocket messages. Connection established via RPC call to Dashboard Worker.</reason>
+    </interface>
+    <interface>
+      <name>TestReport</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface TestReport { id: string; url: string; status: string; overallScore: number | null; metrics: MetricScore[]; screenshots: TestReportScreenshot[]; events: TestEvent[]; consoleLogs: string[]; networkErrors: NetworkError[]; timestamps: { createdAt: number; completedAt: number | null; duration: number | null }; aiModel?: string }</signature>
+      <path>src/shared/types.ts</path>
+      <reason>Type definition for complete test report data. Used by Agent Focus Mode final report display and TestCard components.</reason>
+    </interface>
+    <interface>
+      <name>TestRunSummary</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface TestRunSummary { id: string; url: string; status: string; phase?: string; score?: number; timestamps: { createdAt: number; completedAt?: number; duration?: number } }</signature>
+      <path>src/shared/types.ts</path>
+      <reason>Type definition for test run summary displayed in Card Gallery. Used by TestCard component props.</reason>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>
+      Visual regression testing: Compare implemented dashboard with UX reference mockup (docs/ux-reference-mockup.html). Verify color accuracy, spacing, typography match exactly. Component testing: Test each custom component (TestCard, AgentStatusHeader, LiveFeedTimeline, ScreenshotGallery) in isolation. Verify props, state, and event handlers work correctly. Integration testing: Test complete user flows (submit test → watch in Agent Focus Mode → view report → return to gallery). Verify all existing functionality (Stories 3.1-3.6) still works with new UI. Responsive testing: Test on desktop (>1024px), tablet (640-1024px), and mobile (&lt;640px). Verify Card Gallery grid adjusts correctly, Agent Focus Mode layout adapts to screen size. Accessibility testing: Test keyboard navigation, focus indicators, ARIA labels, screen reader compatibility. Verify WCAG AA color contrast compliance. Performance testing: Measure page load time, animation frame rate, WebSocket connection stability. Check for memory leaks in browser DevTools.
+    </standards>
+    <locations>
+      <location>tests/story-3.7-ux-phase-1.test.ts</location>
+      <location>tests/browser-integration.test.ts</location>
+      <location>Manual testing in browser DevTools</location>
+    </locations>
+    <ideas>
+      <test ac="1">Test Tailwind CSS installation and configuration: Verify Tailwind config loads correctly, Agent Orange colors available, typography scale configured, system fonts render correctly.</test>
+      <test ac="2">Test Agent Orange color system: Verify all color values match specification (#f97316, #c2410c, #22c55e, #ef4444, #0a0a0a, #161616, #333333), CSS variables set correctly, accessibility contrast ratios meet WCAG AA.</test>
+      <test ac="3">Test typography configuration: Verify heading sizes (h1: 2rem, h2: 1.5rem, h3: 1.25rem), body font size (1rem), system fonts fallback correctly, monospace font for URLs/IDs.</test>
+      <test ac="4">Test Card Gallery view: Verify grid layout (3/2/1 columns responsive), TestCard components render correctly, status badges display with Agent Orange colors, Quick Submit input works, empty state displays, card click navigates to Agent Focus Mode.</test>
+      <test ac="5">Test Agent Focus Mode: Verify full-screen layout renders, Agent Status Header displays metrics correctly, Live Feed Timeline receives WebSocket updates, Screenshot Gallery displays screenshots, lightbox opens on click, final report displays when test completes, back button returns to Card Gallery.</test>
+      <test ac="6">Test custom components: Verify TestCard component props and rendering, AgentStatusHeader metrics display, LiveFeedTimeline WebSocket consumption, ScreenshotGallery lightbox functionality, QuickSubmitInput submission flow.</test>
+      <test ac="7">Test navigation and state: Verify URL routing (/ and /test/:id), auto-open Agent Focus Mode on test submission, scroll position persistence, view preference localStorage persistence.</test>
+      <test ac="8">Test UX mockup matching: Compare implemented dashboard with mockup, verify color scheme matches exactly, verify spacing and typography match, verify component styling matches mockup.</test>
+      <test ac="all">Integration test: Submit test from Card Gallery → Auto-open Agent Focus Mode → Watch live updates → View screenshots → Test completes → Final report displays → Click back → Return to Card Gallery → Verify test appears with updated status.</test>
+    </ideas>
+  </tests>
+</story-context>
+

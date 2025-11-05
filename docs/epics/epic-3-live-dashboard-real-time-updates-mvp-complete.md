@@ -207,12 +207,105 @@ So that the system is accessible and maintainable.
 
 ---
 
-**Epic 3 Summary:**
-- **Total Stories:** 6
-- **Sequential dependencies:** 3.1 → 3.2 → 3.3 → 3.4 → 3.5 → 3.6
-- **Estimated Duration:** Days 4-5
-- **Deliverable:** **🎉 MVP COMPLETE** - Full end-to-end game testing pipeline with live dashboard
+**Story 3.7: UX Phase 1 - Three-View Architecture with Agent Orange Theme**
 
-**🏁 MVP MILESTONE:** After Epic 3, GameEval is feature-complete and production-ready. Users can submit game URLs, watch AI test games in real-time, and receive comprehensive quality reports.
+As a game developer,
+I want a modern, professional dashboard with Card Gallery, Agent Focus Mode, and Agent Orange branding,
+So that GameEval feels polished and provides an engaging testing experience.
+
+**Acceptance Criteria:**
+
+**1. Design System Foundation**
+1. Install and configure shadcn/ui + Tailwind CSS
+2. Implement Agent Orange color system:
+   - Primary: #f97316 (Orange 500) - main actions, CTAs, running states
+   - Primary Dark: #c2410c (Orange 700) - hover states
+   - Success: #22c55e (Green 500) - completed tests
+   - Error: #ef4444 (Red 500) - failed tests
+   - Background: #0a0a0a, Surface: #161616, Border: #333333
+3. Configure Tailwind with custom color palette
+4. Set up system fonts and typography scale
+
+**2. Card Gallery View (Default Dashboard)**
+5. Implement grid layout for test cards (3 columns desktop, 2 tablet, 1 mobile)
+6. Create TestCard component showing:
+   - Visual status indicator (animated pulse for running)
+   - Game URL (truncated with tooltip)
+   - Status badge with Agent Orange colors
+   - Duration/elapsed time
+   - Quality score (if completed) with color coding
+7. Quick Submit input at top of page (always visible, low friction)
+8. Empty state: "No tests yet. Submit a game URL to get started!"
+9. Click card → Navigate to Agent Focus Mode
+
+**3. Agent Focus Mode (Immersive Single-Test View)**
+10. Full-screen layout with back button (returns to Card Gallery)
+11. Agent Status Header component:
+    - Large status summary ("Agent is discovering controls...")
+    - Metrics grid: Progress (1/4), Duration (2m 34s), Screenshots (8), Confidence (85%)
+    - Live pulsing indicator when active
+12. Split view layout (desktop):
+    - Left 50%: Live Feed Timeline component
+    - Right 50%: Screenshot Gallery component
+13. Live Feed Timeline:
+    - Timestamp + brief status updates (Gemini-style concise)
+    - Auto-scroll to latest
+    - Color-coded event types
+14. Screenshot Gallery:
+    - Grid layout with captions
+    - Click to open lightbox (fullscreen, keyboard navigation)
+    - Load as agent captures them
+15. Final report display (when complete):
+    - Large quality score with color
+    - Individual metric scores with progress bars
+    - AI justifications
+    - Export JSON button
+
+**4. Component Library**
+16. Use shadcn/ui components: Button, Card, Badge, Input
+17. Create custom components:
+    - TestCard (for gallery)
+    - AgentStatusHeader (for focus mode)
+    - LiveFeedTimeline (event stream)
+    - ScreenshotGallery (with lightbox)
+    - QuickSubmitInput (URL submission)
+
+**5. Navigation & State**
+18. URL routing: `/` (Card Gallery), `/test/:id` (Agent Focus)
+19. Back button in Focus Mode returns to `/`
+20. Auto-open Agent Focus Mode on new test submission
+21. Maintain scroll position when returning to gallery
+
+**6. Implementation Reference**
+22. Use `docs/ux-reference-mockup.html` as visual reference
+23. Match color scheme, spacing, and component styling exactly
+24. Follow three-view architecture as specified in UX Design Specification
+
+**Prerequisites:** Stories 3.5, 3.6 complete (MVP validated and deployed)
+
+**Technical Notes:**
+- Reference: `docs/ux-design-specification.md` (Section 9: Implementation Guidance)
+- Reference: `docs/ux-reference-mockup.html` (Interactive mockup)
+- Component structure in `src/components/` folder
+- Real-time updates via existing WebSocket (Story 3.3)
+- Table View reserved for UX Phase 2 (Epic 5)
+- This establishes UI foundation for all future features
+
+**Design Decisions:**
+- Card Gallery default (visual-first for game testing)
+- Agent Orange conveys energy and approachability
+- Progressive disclosure (summary → details on demand)
+- Brief status updates (not overwhelming logs)
+- Auto-open Focus Mode creates "wow" moment for first-time users
+
+---
+
+**Epic 3 Summary:**
+- **Total Stories:** 7
+- **Sequential dependencies:** 3.1 → 3.2 → 3.3 → 3.4 → 3.5 → 3.6 → 3.7
+- **Estimated Duration:** Days 4-6
+- **Deliverable:** **🎉 MVP COMPLETE + UX ENHANCED** - Full end-to-end game testing pipeline with modern, professional dashboard
+
+**🏁 MVP MILESTONE:** After Epic 3, GameEval is feature-complete with a polished user experience. Users can submit game URLs, watch AI test games in real-time through an immersive Agent Focus Mode, and receive comprehensive quality reports in a beautiful Card Gallery interface.
 
 ---

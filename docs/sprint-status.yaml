@@ -61,22 +61,24 @@ development_status:
   3-4-detailed-test-report-view: done
   3-5-example-game-testing-and-validation: in-progress
   3-6-production-deployment-and-documentation: ready-for-dev
+  3-7-ux-phase-1-three-view-architecture-agent-orange: ready-for-dev
   epic-3-retrospective: optional
 
   epic-4: backlog
-  4-1-concurrent-test-load-testing: backlog
-  4-2-advanced-error-handling-and-edge-cases: backlog
-  4-3-ai-gateway-cost-optimization: backlog
-  4-4-ui-polish-and-responsive-design: backlog
+  4-1-ux-phase-3-polish-and-responsive-design: backlog
+  4-2-concurrent-test-load-testing: backlog
+  4-3-advanced-error-handling-and-edge-cases: backlog
+  4-4-ai-gateway-cost-optimization: backlog
   4-5-rate-limiting-with-cloudflare-rate-limiting: backlog
   4-6-ai-security-with-firewall-for-ai: backlog
   epic-4-retrospective: optional
 
   epic-5: backlog
-  5-1-dashboard-filtering-and-sorting: backlog
-  5-2-batch-testing: backlog
-  5-3-multi-model-comparison: backlog
-  5-4-historical-trends-and-analytics: backlog
-  5-5-workers-kv-dashboard-caching: backlog
+  5-1-ux-phase-2-table-view-filtering-sorting-export: backlog
+  5-2-stop-kill-running-tests: backlog
+  5-3-batch-testing: backlog
+  5-4-multi-model-comparison: backlog
+  5-5-version-comparison-historical-analytics: backlog
+  5-6-workers-kv-dashboard-caching: backlog
   epic-5-retrospective: optional
 
