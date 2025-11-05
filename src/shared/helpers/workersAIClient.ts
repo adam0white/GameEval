@@ -1,6 +1,7 @@
 /**
- * Workers AI Client for Stagehand
- * Based on: https://github.com/cloudflare/playwright/blob/main/packages/playwright-cloudflare/examples/stagehand/src/worker/workersAIClient.ts
+ * Workers AI Client for Stagehand with AI Gateway support
+ * Based on: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
+ * Routes all AI requests through Cloudflare AI Gateway for observability and caching
  */
 
 import {
@@ -12,13 +13,16 @@ import zodToJsonSchema from 'zod-to-json-schema';
 
 type WorkersAIOptions = AiOptions & {
   logger?: (line: LogLine) => void;
+  gateway?: {
+    id: string;
+  };
 };
 
 const modelId = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
-// Basic implementation of LLMClient for Workers AI.
-// This uses @cf/meta/llama-3.3-70b-instruct-fp8-fast model. If you want to
-// use a different model, you can adapt this class.
+// Basic implementation of LLMClient for Workers AI with AI Gateway support
+// This uses @cf/meta/llama-3.3-70b-instruct-fp8-fast model routed through AI Gateway
+// Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
 export class WorkersAIClient extends LLMClient {
   public type = 'workers-ai' as const;
   private binding: Ai;
@@ -35,6 +39,8 @@ export class WorkersAIClient extends LLMClient {
 
     this.options?.logger?.({ category: 'workersai', message: 'thinking...' });
 
+    // Route through AI Gateway for observability and caching
+    // Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
     const { response } = (await this.binding.run(
       this.modelName as keyof AiModels,
       {
@@ -49,7 +55,12 @@ export class WorkersAIClient extends LLMClient {
           : undefined,
         temperature: 0,
       },
-      this.options
+      {
+        ...this.options,
+        // Pass gateway configuration to AI binding
+        // This routes the request through AI Gateway for monitoring and caching
+        gateway: this.options?.gateway,
+      }
     )) as AiTextGenerationOutput;
 
     this.options?.logger?.({ category: 'workersai', message: 'completed thinking!' });

@@ -13,7 +13,7 @@ import { Stagehand, type ObserveResult } from '@browserbasehq/stagehand';
 import { endpointURLString } from '@cloudflare/playwright';
 import { WorkersAIClient } from '../shared/helpers/workersAIClient';
 import { insertTestEvent, insertEvaluationScore, updateTestStatus } from '../shared/helpers/d1';
-import { uploadScreenshot, uploadLog, getTestArtifacts } from '../shared/helpers/r2';
+import { uploadScreenshot, uploadLog, getTestArtifacts, getPublicUrl } from '../shared/helpers/r2';
 import { callAI } from '../shared/helpers/ai-gateway';
 import { Phase, LogType, ERROR_MESSAGES, ERROR_PATTERNS } from '../shared/constants';
 import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError, Phase1Result, Phase2Result, Phase3Result, Phase4Result, MetricScore, ControlMap } from '../shared/types';
@@ -1949,7 +1949,7 @@ Return ONLY valid JSON in this exact format:
         }
         
         key = result.data;
-        url = `${this.env.R2_PUBLIC_URL}/${key}`;
+        url = getPublicUrl(key, this.env);
       } else if (type === 'log' && typeof data === 'string') {
         const logType = metadata?.logType || LogType.AGENT_DECISIONS;
         
@@ -1965,7 +1965,7 @@ Return ONLY valid JSON in this exact format:
         }
         
         key = result.data;
-        url = `${this.env.R2_PUBLIC_URL}/${key}`;
+        url = getPublicUrl(key, this.env);
       } else {
         throw new Error('Invalid evidence type or data format');
       }
@@ -1986,6 +1986,7 @@ Return ONLY valid JSON in this exact format:
       return url;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[TestAgent] Failed to store evidence:`, message);
       throw new Error(`Failed to store evidence: ${message}`);
     }
   }
@@ -2024,9 +2025,14 @@ Return ONLY valid JSON in this exact format:
         return this.stagehand;
       }
 
-      // Initialize Stagehand with Workers AI and Cloudflare Browser Rendering
+      // Initialize Stagehand with Workers AI routed through AI Gateway
       // Following: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
-      const llmClient = new WorkersAIClient(this.env.AI);
+      // All AI requests route through AI Gateway for observability, caching, and cost tracking
+      const llmClient = new WorkersAIClient(this.env.AI, {
+        gateway: {
+          id: 'ai-gateway-gameeval'
+        }
+      });
 
       this.stagehand = new Stagehand({
         env: 'LOCAL',
@@ -2140,9 +2146,29 @@ Return ONLY valid JSON in this exact format:
         phase,
       });
 
+      // Log to test events for visibility
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        phase,
+        'screenshot_captured',
+        `Screenshot captured: ${description}`
+      );
+
       return url;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[TestAgent] Screenshot capture failed:`, message);
+      
+      // Log failure to test events
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        phase,
+        'screenshot_failed',
+        `Failed to capture screenshot ${description}: ${message}`
+      );
+      
       throw new Error(`Failed to capture screenshot: ${message}`);
     }
   }

@@ -59,7 +59,7 @@ development_status:
   3-2-test-run-list-with-real-time-status: done
   3-3-websocket-connection-for-live-updates: done
   3-4-detailed-test-report-view: done
-  3-5-example-game-testing-and-validation: ready-for-dev
+  3-5-example-game-testing-and-validation: in-progress
   3-6-production-deployment-and-documentation: ready-for-dev
   epic-3-retrospective: optional
 

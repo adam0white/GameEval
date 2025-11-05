@@ -70,11 +70,10 @@ export function generateLogPath(testId: string, logType: LogType): string {
 /**
  * Generates a public URL for an R2 object
  * 
- * Relies on the `R2_PUBLIC_URL` environment variable, which should point to the
- * public R2.dev domain or a custom domain configured for the bucket.
+ * In local development, this returns a URL that routes through the worker's /r2/ endpoint.
+ * In production, this can use either the worker endpoint or a custom R2 domain.
  * 
- * Note: The bucket must have public access enabled for these URLs to work.
- * Configure via Cloudflare dashboard: R2 > [bucket] > Settings > Public Access
+ * The worker endpoint (/r2/) works in both environments and doesn't require R2 public access.
  * 
  * @param key - R2 object key
  * @param env - Cloudflare environment object
@@ -86,7 +85,8 @@ export function generateLogPath(testId: string, logType: LogType): string {
  *   'tests/123/screenshots/1699104850000-phase3-action.png',
  *   env
  * );
- * // Returns: 'https://evidence.adamwhite.work/tests/123/screenshots/1699104850000-phase3-action.png'
+ * // Local dev: 'http://localhost:8787/r2/tests/123/screenshots/...'
+ * // Production: 'https://evidence.adamwhite.work/r2/tests/123/screenshots/...'
  * ```
  */
 function resolvePublicBaseUrl(env: Env): string {
@@ -102,6 +102,13 @@ function resolvePublicBaseUrl(env: Env): string {
 
 export function getPublicUrl(key: string, env: Env): string {
   const baseUrl = resolvePublicBaseUrl(env);
+  
+  // Only use /r2/ proxy for local development (localhost)
+  // Production with custom domain serves R2 directly
+  if (baseUrl.includes('localhost')) {
+    return `${baseUrl}/r2/${key}`;
+  }
+  
   return `${baseUrl}/${key}`;
 }
 
@@ -154,6 +161,7 @@ export async function uploadScreenshot(
     return { success: true, data: key };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[R2] Screenshot upload failed for ${testId}:`, message);
     return {
       success: false,
       error: `Failed to upload screenshot: ${message}`,
@@ -310,7 +318,6 @@ export async function getTestArtifacts(
   env: Env
 ): Promise<DbResult<TestArtifact[]>> {
   try {
-    const publicBaseUrl = resolvePublicBaseUrl(env);
     const prefix = `tests/${testId}/`;
     const listed = await r2.list({ prefix });
     
@@ -326,7 +333,7 @@ export async function getTestArtifacts(
         return {
           key: obj.key,
           type: 'screenshot',
-          url: `${publicBaseUrl}/${obj.key}`,
+          url: getPublicUrl(obj.key, env), // Use helper function to get correct URL with /r2/ prefix
           uploaded_at: uploadedAt,
           metadata,
         };
@@ -340,7 +347,7 @@ export async function getTestArtifacts(
       return {
         key: obj.key,
         type: 'log',
-        url: `${publicBaseUrl}/${obj.key}`,
+        url: getPublicUrl(obj.key, env), // Use helper function to get correct URL with /r2/ prefix
         uploaded_at: uploadedAt,
         metadata: {
           logType,

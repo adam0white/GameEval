@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2025-11-04"
 compatibility_flags = ["nodejs_compat", "enable_ctx_exports"]
 account_id = "a20259cba74e506296745f9c67c1f3bc"
+workers_dev = false
+
+[[routes]]
+pattern = "gameeval.adamwhite.work"
+custom_domain = true
 
 # Module aliases for Stagehand - Replace playwright with @cloudflare/playwright
 # Based on: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
@@ -10,6 +15,9 @@ account_id = "a20259cba74e506296745f9c67c1f3bc"
 "playwright" = "@cloudflare/playwright"
 
 [vars]
+# R2_PUBLIC_URL points to the worker itself, which serves R2 files via /r2/ endpoint
+# In local dev with `.dev.vars` file: wrangler dev ignores this and uses http://localhost:8787
+# In production: uses the worker's production URL
 R2_PUBLIC_URL = "https://evidence.adamwhite.work"
 
 [observability]

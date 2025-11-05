@@ -193,6 +193,32 @@ export default {
       }
     }
 
+    // Route: Serve R2 objects directly (works in both local dev and production)
+    // This allows screenshots to work in local dev without requiring R2 public access
+    if (url.pathname.startsWith('/r2/')) {
+      try {
+        const key = url.pathname.substring(4); // Remove '/r2/' prefix
+        const obj = await env.EVIDENCE_BUCKET.get(key);
+        
+        if (!obj) {
+          return new Response('File not found', { status: 404 });
+        }
+        
+        const headers = new Headers();
+        obj.writeHttpMetadata(headers);
+        headers.set('etag', obj.httpEtag);
+        headers.set('cache-control', 'public, max-age=31536000'); // Cache for 1 year
+        
+        return new Response(obj.body, { headers });
+      } catch (error) {
+        console.error('R2 proxy error:', error);
+        return Response.json(
+          { error: sanitizeErrorMessage(error) },
+          { status: 500 }
+        );
+      }
+    }
+
     // 404 for all other routes
     return new Response('Not Found', { status: 404 });
   },
@@ -600,45 +626,45 @@ function getHTML(): string {
       background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
       color: #f0f0f0;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       padding: 20px;
+      overflow-y: auto;
     }
 
     .container {
       background: #2a2a2a;
       border-radius: 12px;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-      max-width: 600px;
+      max-width: 1200px;
       width: 100%;
-      padding: 40px;
+      margin: 0 auto;
+      padding: 30px;
     }
 
     header {
       text-align: center;
-      margin-bottom: 40px;
-      padding-bottom: 30px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
       border-bottom: 2px solid #FF6B35;
     }
 
     h1 {
-      font-size: 2.5em;
+      font-size: 1.8em;
       color: #FF6B35;
-      margin-bottom: 10px;
+      margin-bottom: 5px;
       font-weight: 700;
     }
 
     .tagline {
-      font-size: 1.1em;
+      font-size: 0.9em;
       color: #b0b0b0;
       font-weight: 300;
     }
 
     form {
-      display: flex;
-      flex-direction: column;
-      gap: 25px;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 15px;
+      align-items: end;
     }
 
     .form-group {
@@ -648,19 +674,19 @@ function getHTML(): string {
     }
 
     label {
-      font-size: 0.95em;
+      font-size: 0.85em;
       color: #d0d0d0;
       font-weight: 500;
     }
 
     input[type="text"],
     textarea {
-      padding: 12px 16px;
+      padding: 8px 12px;
       background: #1a1a1a;
       border: 2px solid #3a3a3a;
       border-radius: 6px;
       color: #f0f0f0;
-      font-size: 1em;
+      font-size: 0.9em;
       font-family: 'Courier New', Monaco, monospace;
       transition: border-color 0.2s ease;
     }
@@ -672,9 +698,9 @@ function getHTML(): string {
     }
 
     textarea {
-      min-height: 120px;
+      min-height: 60px;
       resize: vertical;
-      font-size: 0.9em;
+      font-size: 0.85em;
     }
 
     .error-message {
@@ -684,16 +710,15 @@ function getHTML(): string {
     }
 
     button {
-      padding: 14px 28px;
+      padding: 10px 20px;
       background: #FF6B35;
       color: #ffffff;
       border: none;
       border-radius: 6px;
-      font-size: 1.1em;
+      font-size: 0.95em;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
-      margin-top: 10px;
     }
 
     button:hover {
@@ -713,58 +738,10 @@ function getHTML(): string {
       box-shadow: none;
     }
 
-    .loading {
-      display: none;
-      text-align: center;
-      margin-top: 20px;
-      color: #FF6B35;
-    }
-
-    .loading.active {
-      display: block;
-    }
-
-    .result {
-      display: none;
-      margin-top: 30px;
-      padding: 20px;
-      background: #1a1a1a;
-      border-radius: 6px;
-      border-left: 4px solid #FF6B35;
-    }
-
-    .result.active {
-      display: block;
-    }
-
-    .result.error {
-      border-left-color: #ff4444;
-    }
-
-    .result h3 {
-      color: #FF6B35;
-      margin-bottom: 10px;
-    }
-
-    .result.error h3 {
-      color: #ff4444;
-    }
-
-    .test-id {
-      font-family: 'Courier New', Monaco, monospace;
-      color: #f0f0f0;
-      font-size: 1.1em;
-      background: #2a2a2a;
-      padding: 10px;
-      border-radius: 4px;
-      margin-top: 10px;
-      word-break: break-all;
-    }
-
     /* Test Run List Styles (Story 3.2) */
     .test-list-section {
-      margin-top: 60px;
-      padding-top: 40px;
+      margin-top: 30px;
+      padding-top: 25px;
       border-top: 2px solid #3a3a3a;
     }
 
@@ -777,7 +754,7 @@ function getHTML(): string {
 
     .test-list-header h2 {
       color: #FF6B35;
-      font-size: 1.8em;
+      font-size: 1.5em;
       margin: 0;
     }
 
@@ -787,8 +764,6 @@ function getHTML(): string {
     }
 
     .test-list-container {
-      max-height: 600px;
-      overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 15px;
@@ -1069,46 +1044,38 @@ function getHTML(): string {
     .score-yellow { color: #FFC107; }
     .score-red { color: #F44336; }
 
-    .metric-item {
-      margin-bottom: 15px;
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
     }
 
-    .metric-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
+    .metric-item-compact {
+      background: #1a1a1a;
+      padding: 12px 15px;
+      border-radius: 6px;
+      border-left: 3px solid #FF6B35;
     }
 
-    .metric-name {
+    .metric-compact-name {
       font-weight: 600;
       color: #f0f0f0;
       text-transform: capitalize;
+      font-size: 0.9em;
+      margin-bottom: 4px;
     }
 
-    .metric-score {
+    .metric-compact-score {
       font-weight: 700;
       color: #FF6B35;
-    }
-
-    .metric-progress-bar {
-      height: 8px;
-      background: #1a1a1a;
-      border-radius: 4px;
-      overflow: hidden;
+      font-size: 1.1em;
       margin-bottom: 6px;
     }
 
-    .metric-progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #FF6B35 0%, #FF8555 100%);
-      transition: width 0.5s ease;
-    }
-
-    .metric-justification {
-      font-size: 0.9em;
+    .metric-compact-just {
+      font-size: 0.85em;
       color: #b0b0b0;
-      line-height: 1.5;
+      line-height: 1.4;
     }
 
     .timeline-list {
@@ -1449,16 +1416,6 @@ function getHTML(): string {
       <button type="submit" id="submitBtn">Start Test</button>
     </form>
 
-    <div class="loading" id="loading">
-      <p>⏳ Starting test...</p>
-    </div>
-
-    <div class="result" id="result">
-      <h3 id="resultTitle"></h3>
-      <p id="resultMessage"></p>
-      <div class="test-id" id="testId"></div>
-    </div>
-
     <!-- Test Run List Section (Story 3.2) -->
     <div class="test-list-section">
       <div class="test-list-header">
@@ -1487,11 +1444,6 @@ function getHTML(): string {
   <script>
     const form = document.getElementById('testForm');
     const submitBtn = document.getElementById('submitBtn');
-    const loading = document.getElementById('loading');
-    const result = document.getElementById('result');
-    const resultTitle = document.getElementById('resultTitle');
-    const resultMessage = document.getElementById('resultMessage');
-    const testIdDiv = document.getElementById('testId');
     const urlError = document.getElementById('urlError');
     const schemaError = document.getElementById('schemaError');
     const gameUrlInput = document.getElementById('gameUrl');
@@ -1537,8 +1489,7 @@ function getHTML(): string {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      // Reset previous results
-      result.classList.remove('active', 'error');
+      // Reset previous errors
       urlError.textContent = '';
       schemaError.textContent = '';
 
@@ -1560,9 +1511,11 @@ function getHTML(): string {
         return;
       }
 
-      // Show loading state
+      // Show loading state in button
+      const originalButtonText = submitBtn.textContent;
       submitBtn.disabled = true;
-      loading.classList.add('active');
+      submitBtn.textContent = 'Starting Test...';
+      submitBtn.style.background = '#888';
 
       try {
         // Call RPC submitTest endpoint
@@ -1583,12 +1536,9 @@ function getHTML(): string {
           throw new Error(data.error || 'Failed to submit test');
         }
 
-        // Display success result
-        result.classList.add('active');
-        resultTitle.textContent = '✅ Test Started Successfully';
-        resultMessage.textContent = 'Your test has been queued for execution. Use the Test ID below to track progress:';
-        testIdDiv.textContent = data.testId;
-        testIdDiv.style.display = 'block';
+        // Show success in button
+        submitBtn.textContent = '✓ Test Started';
+        submitBtn.style.background = '#22c55e';
 
         // Reset form
         form.reset();
@@ -1615,16 +1565,24 @@ function getHTML(): string {
             console.warn('Could not find Live Feed elements for test:', data.testId);
           }
         }, 500);
+        
+        // Reset button after 2 seconds
+        setTimeout(() => {
+          submitBtn.textContent = originalButtonText;
+          submitBtn.style.background = '';
+          submitBtn.disabled = false;
+        }, 2000);
       } catch (error) {
-        // Display error result
-        result.classList.add('active', 'error');
-        resultTitle.textContent = '❌ Error';
-        resultMessage.textContent = error.message || 'An unexpected error occurred. Please try again.';
-        testIdDiv.style.display = 'none';
-      } finally {
-        // Hide loading state
-        loading.classList.remove('active');
-        submitBtn.disabled = false;
+        // Show error in button
+        submitBtn.textContent = '✗ ' + (error.message || 'Error');
+        submitBtn.style.background = '#ef4444';
+        
+        // Reset button after 3 seconds
+        setTimeout(() => {
+          submitBtn.textContent = originalButtonText;
+          submitBtn.style.background = '';
+          submitBtn.disabled = false;
+        }, 3000);
       }
     });
 
@@ -1634,7 +1592,7 @@ function getHTML(): string {
     const testListLoading = document.getElementById('testListLoading');
     let pollingInterval = null;
 
-    // Format relative time (e.g., "2 minutes ago")
+    // Format relative time with seconds precision
     function formatRelativeTime(timestamp) {
       const now = Date.now();
       const diffMs = now - timestamp;
@@ -1643,8 +1601,10 @@ function getHTML(): string {
       const diffHour = Math.floor(diffMin / 60);
       const diffDay = Math.floor(diffHour / 24);
 
-      if (diffSec < 60) {
+      if (diffSec < 10) {
         return 'just now';
+      } else if (diffSec < 60) {
+        return \`\${diffSec} seconds ago\`;
       } else if (diffMin < 60) {
         return \`\${diffMin} minute\${diffMin === 1 ? '' : 's'} ago\`;
       } else if (diffHour < 24) {
@@ -1695,6 +1655,9 @@ function getHTML(): string {
       }
 
       testListEmpty.style.display = 'none';
+
+      // Save scroll position before re-render
+      const scrollTop = testListContainer.scrollTop;
 
       // Save currently expanded Live Feeds AND their contents before re-render
       const liveFeeds = testListContainer.querySelectorAll('.live-feed-container.expanded');
@@ -1803,25 +1766,54 @@ function getHTML(): string {
       const cards = testListContainer.querySelectorAll('.test-card');
       cards.forEach(card => {
         card.addEventListener('click', (e) => {
-          // Don't toggle details if clicking on Live Feed toggle or inside detailed report content
-          if (e.target.closest('.live-feed-toggle') || e.target.closest('.detailed-report-content')) {
+          // Don't toggle if clicking inside detailed report content (but allow Live Feed toggle)
+          if (e.target.closest('.detailed-report-content') && !e.target.closest('.live-feed-toggle')) {
             return;
           }
           
           const testId = card.getAttribute('data-test-id');
           const details = document.getElementById(\`details-\${testId}\`);
+          const liveFeedToggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${testId}"]\`);
+          const liveFeedContainer = document.getElementById(\`live-feed-\${testId}\`);
           
+          // Toggle both details AND live feed together
           if (details.classList.contains('expanded')) {
+            // Collapse both
             details.classList.remove('expanded');
             expandedDetails.delete(testId);
+            if (liveFeedToggle) liveFeedToggle.classList.remove('expanded');
+            if (liveFeedContainer) liveFeedContainer.classList.remove('expanded');
+            expandedLiveFeeds.delete(testId);
           } else {
+            // Expand both
             details.classList.add('expanded');
             expandedDetails.add(testId);
+            if (liveFeedToggle) liveFeedToggle.classList.add('expanded');
+            if (liveFeedContainer) liveFeedContainer.classList.add('expanded');
+            expandedLiveFeeds.add(testId);
+            
             // Load test report when expanding (Story 3.4)
             loadTestReport(testId);
+            
+            // Get test status to determine if we need WebSocket
+            const statusElement = document.getElementById(\`status-\${testId}\`);
+            const status = statusElement ? statusElement.textContent : null;
+            
+            // Only connect WebSocket for active tests (queued or running)
+            if (status && (status === 'queued' || status === 'running')) {
+              if (!webSocketConnections.has(testId)) {
+                connectWebSocket(testId);
+              }
+            } else {
+              // For completed/failed tests, load historical events into timeline
+              loadHistoricalEvents(testId);
+            }
           }
         });
       });
+
+      // Restore scroll position after re-render
+      testListContainer.scrollTop = scrollTop;
     }
 
     // Click-outside handler for closing detailed reports (AC-7)
@@ -1847,6 +1839,52 @@ function getHTML(): string {
 
     // Test Report Loading and Rendering (Story 3.4)
     const loadedReports = new Map(); // Cache loaded reports to avoid re-fetching
+
+    // Load historical events from test_events into timeline (for completed tests)
+    async function loadHistoricalEvents(testId) {
+      try {
+        const response = await fetch(\`/rpc/getTestReport?testId=\${testId}\`);
+        if (!response.ok) return;
+        
+        const testReport = await response.json();
+        const container = document.getElementById(\`live-feed-\${testId}\`);
+        if (!container || !testReport.events) return;
+
+        // Clear any placeholders
+        const placeholder = container.querySelector('.live-feed-placeholder');
+        if (placeholder) placeholder.remove();
+
+        // Add historical events in chronological order (oldest to newest)
+        const events = [...testReport.events].reverse(); // Reverse since we prepend
+        events.forEach(event => {
+          const timestamp = new Date(event.timestamp).toLocaleTimeString();
+          const messageElement = document.createElement('div');
+          messageElement.className = 'live-feed-message';
+          
+          messageElement.innerHTML = \`
+            <span class="live-feed-timestamp">\${timestamp}</span>
+            <span class="live-feed-text">\${event.description}</span>
+          \`;
+          
+          container.insertBefore(messageElement, container.firstChild);
+        });
+        
+        // Update toggle text to "Timeline" for completed tests
+        const liveFeedToggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${testId}"]\`);
+        if (liveFeedToggle) {
+          const toggleText = liveFeedToggle.querySelector('.live-feed-toggle-text');
+          if (toggleText) {
+            // Remove WebSocket indicator
+            const wsIndicator = toggleText.querySelector('.live-feed-websocket-indicator');
+            if (wsIndicator) wsIndicator.remove();
+            // Update text
+            toggleText.childNodes[0].textContent = 'Timeline';
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load historical events:', error);
+      }
+    }
 
     // Load test report from RPC
     async function loadTestReport(testId) {
@@ -1913,50 +1951,34 @@ function getHTML(): string {
         \`;
       }
 
-      // Metrics Section
+      // Metrics Section - nicely formatted without progress bars
       if (report.metrics && report.metrics.length > 0) {
-        html += '<div class="report-section"><div class="report-section-title">Individual Metrics</div>';
+        html += '<div class="report-section"><div class="report-section-title">Individual Metrics</div><div class="metrics-grid">';
         report.metrics.forEach(metric => {
-          const progress = metric.score;
+          // Skip overall metric (already shown above)
+          if (metric.name === 'overall') return;
+          
           html += \`
-            <div class="metric-item">
-              <div class="metric-header">
-                <span class="metric-name">\${metric.name}</span>
-                <span class="metric-score">\${metric.score}/100</span>
-              </div>
-              <div class="metric-progress-bar">
-                <div class="metric-progress-fill" style="width: \${progress}%"></div>
-              </div>
-              <div class="metric-justification">\${metric.justification}</div>
-            </div>
-          \`;
-        });
-        html += '</div>';
-      }
-
-      // Timeline Section
-      if (report.events && report.events.length > 0) {
-        html += '<div class="report-section"><div class="report-section-title">Timeline of AI Actions</div><div class="timeline-list">';
-        report.events.forEach(event => {
-          const timestamp = new Date(event.timestamp).toLocaleTimeString();
-          html += \`
-            <div class="timeline-event">
-              <span class="timeline-timestamp">\${timestamp}</span>
-              <span class="timeline-phase">\${event.phase}</span>
-              <span>\${event.description}</span>
+            <div class="metric-item-compact">
+              <div class="metric-compact-name">\${metric.name}</div>
+              <div class="metric-compact-score">\${metric.score}/100</div>
+              <div class="metric-compact-just">\${metric.justification}</div>
             </div>
           \`;
         });
         html += '</div></div>';
       }
 
+      // Timeline removed - redundant with Live Feed which shows real-time events
+
       // Screenshot Gallery Section
       if (report.screenshots && report.screenshots.length > 0) {
         html += '<div class="report-section"><div class="report-section-title">Screenshot Gallery</div><div class="screenshot-gallery">';
         report.screenshots.forEach((screenshot, index) => {
+          const fixedUrl = fixLegacyUrl(screenshot.url);
           html += \`
             <div class="screenshot-item" onclick="openLightbox('\${testId}', \${index})">
-              <img class="screenshot-img" src="\${screenshot.url}" alt="\${screenshot.description}" loading="lazy">
+              <img class="screenshot-img" src="\${fixedUrl}" alt="\${screenshot.description}" loading="lazy">
               <div class="screenshot-caption">
                 <span class="screenshot-caption-phase">\${screenshot.phase}:</span>
                 \${screenshot.description}
@@ -2092,6 +2114,14 @@ function getHTML(): string {
       }
     }
 
+    // Fix legacy URLs that have /r2/ prefix on production custom domain
+    function fixLegacyUrl(url) {
+      if (url && url.includes('evidence.adamwhite.work/r2/')) {
+        return url.replace('/r2/', '/');
+      }
+      return url;
+    }
+
     // Lightbox functionality for screenshot gallery
     let currentLightboxTestId = null;
     let currentLightboxIndex = 0;
@@ -2110,7 +2140,7 @@ function getHTML(): string {
       const caption = document.getElementById('lightboxCaption');
 
       const screenshot = report.screenshots[index];
-      img.src = screenshot.url;
+      img.src = fixLegacyUrl(screenshot.url);
       caption.textContent = \`\${screenshot.phase}: \${screenshot.description}\`;
 
       modal.classList.add('active');
@@ -2141,7 +2171,7 @@ function getHTML(): string {
       const caption = document.getElementById('lightboxCaption');
       const screenshot = report.screenshots[currentLightboxIndex];
 
-      img.src = screenshot.url;
+      img.src = fixLegacyUrl(screenshot.url);
       caption.textContent = \`\${screenshot.phase}: \${screenshot.description}\`;
     }
 
@@ -2201,9 +2231,9 @@ function getHTML(): string {
       }
     }
 
-    // Start polling on page load
+    // Start polling on page load (reduced frequency since WebSocket provides real-time updates)
     pollTestList();
-    pollingInterval = setInterval(pollTestList, 3000);
+    pollingInterval = setInterval(pollTestList, 10000); // Poll every 10 seconds instead of 3
 
     // Stop polling when page unloads
     window.addEventListener('beforeunload', () => {
@@ -2219,28 +2249,11 @@ function getHTML(): string {
     const MAX_RECONNECTION_ATTEMPTS = 10;
     const RECONNECTION_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000]; // Exponential backoff up to 30s
 
-    // Toggle live feed visibility
+    // Toggle live feed visibility - removed, now handled by card click
     function toggleLiveFeed(testId) {
-      const toggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${testId}"]\`);
-      const container = document.getElementById(\`live-feed-\${testId}\`);
-      
-      if (toggle && container) {
-        const isExpanding = !container.classList.contains('expanded');
-        
-        toggle.classList.toggle('expanded');
-        container.classList.toggle('expanded');
-
-        // Track expanded state
-        if (isExpanding) {
-          expandedLiveFeeds.add(testId);
-          // If expanded and WebSocket not connected, try to connect
-          if (!webSocketConnections.has(testId)) {
-            connectWebSocket(testId);
-          }
-        } else {
-          expandedLiveFeeds.delete(testId);
-        }
-      }
+      // Deprecated: Live Feed now expands/collapses with test card click
+      // Keeping function for backward compatibility but does nothing
+      return;
     }
 
     // Connect WebSocket for a test
@@ -2254,6 +2267,9 @@ function getHTML(): string {
       if (indicator) {
         indicator.classList.add('connecting');
       }
+
+      // Add placeholder message immediately (will be removed when first real message arrives)
+      addLiveFeedPlaceholder(testId, 'Connecting to test agent...');
 
       try {
         // Create WebSocket connection
@@ -2271,8 +2287,8 @@ function getHTML(): string {
             indicator.classList.add('connected');
           }
 
-          // Add connection message to live feed
-          addLiveFeedMessage(testId, 'Connected to live updates', 'status');
+          // Update placeholder to waiting state
+          addLiveFeedPlaceholder(testId, 'Connected - waiting for updates from agent...');
         };
 
         ws.onmessage = (event) => {
@@ -2369,6 +2385,14 @@ function getHTML(): string {
         addLiveFeedMessage(testId, message.message, message.type);
       }
 
+      // Reload test report if it's currently open (for live updates)
+      if (expandedDetails.has(testId)) {
+        // Invalidate cached report
+        loadedReports.delete(testId);
+        // Reload with fresh data
+        loadTestReport(testId);
+      }
+
       // Handle completion
       if (message.type === 'complete') {
         // Close WebSocket connection
@@ -2382,6 +2406,20 @@ function getHTML(): string {
         const indicator = document.getElementById(\`ws-indicator-\${testId}\`);
         if (indicator) {
           indicator.classList.remove('connected', 'connecting');
+        }
+        
+        // Convert Live Feed to Timeline by removing placeholder and WebSocket indicator
+        const liveFeedToggle = document.querySelector(\`.live-feed-toggle[data-test-id="\${testId}"]\`);
+        if (liveFeedToggle) {
+          // Change text to "Timeline"
+          const toggleText = liveFeedToggle.querySelector('.live-feed-toggle-text');
+          if (toggleText) {
+            // Remove WebSocket indicator
+            const wsIndicator = toggleText.querySelector('.live-feed-websocket-indicator');
+            if (wsIndicator) wsIndicator.remove();
+            // Update text
+            toggleText.childNodes[0].textContent = 'Timeline';
+          }
         }
       }
     }
@@ -2404,18 +2442,45 @@ function getHTML(): string {
       }
     }
 
+    // Add placeholder message to live feed (replaced when real messages arrive)
+    function addLiveFeedPlaceholder(testId, message) {
+      const container = document.getElementById(\`live-feed-\${testId}\`);
+      if (!container) return;
+
+      // Remove any existing placeholders
+      const existingPlaceholder = container.querySelector('.live-feed-placeholder');
+      if (existingPlaceholder) {
+        existingPlaceholder.remove();
+      }
+
+      // Create placeholder element
+      const placeholder = document.createElement('div');
+      placeholder.className = 'live-feed-placeholder live-feed-message';
+      placeholder.style.opacity = '0.6';
+      placeholder.style.fontStyle = 'italic';
+      
+      placeholder.innerHTML = \`
+        <span class="live-feed-text">\${message}</span>
+      \`;
+
+      container.appendChild(placeholder);
+    }
+
     // Add message to live feed (check for duplicates, keep all messages)
     function addLiveFeedMessage(testId, message, type = 'progress') {
       const container = document.getElementById(\`live-feed-\${testId}\`);
+      if (!container) return;
 
-      if (!container) {
-        return;
+      // Remove placeholder when first real message arrives
+      const placeholder = container.querySelector('.live-feed-placeholder');
+      if (placeholder) {
+        placeholder.remove();
       }
 
       const timestamp = new Date().toLocaleTimeString();
       
       // Check if this exact message already exists (prevent duplicates)
-      const existingMessages = container.querySelectorAll('.live-feed-message');
+      const existingMessages = container.querySelectorAll('.live-feed-message:not(.live-feed-placeholder)');
       for (const existing of existingMessages) {
         const existingText = existing.querySelector('.live-feed-text')?.textContent;
         const existingTime = existing.querySelector('.live-feed-timestamp')?.textContent;

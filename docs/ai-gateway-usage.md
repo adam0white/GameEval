@@ -8,7 +8,7 @@ This guide explains how to use the AI Gateway helper functions in the GameEval Q
 
 ## Overview
 
-All AI requests in this project route through Cloudflare AI Gateway with:
+All AI requests in this project route through Cloudflare AI Gateway (`ai-gateway-gameeval`) with:
 
 - **Primary Provider**: Workers AI (via `env.AI` binding) - Free, fast, no API keys
 - **Fallback Provider**: OpenAI GPT-4o (via authenticated AI Gateway) - Automatic failover
@@ -84,10 +84,24 @@ if (costsResult.success) {
 
 ### Request Flow
 
+All AI requests flow through AI Gateway for observability:
+
+**TestAgent (Stagehand):**
+```
+Stagehand observe/act calls
+  ↓
+WorkersAIClient with gateway config
+  ↓
+Workers AI via AI Gateway (ai-gateway-gameeval)
+  ↓
+Return response
+```
+
+**Direct AI calls (callAI helper):**
 ```
 callAI() 
   ↓
-Try Workers AI (primary)
+Try Workers AI (primary) via AI Gateway
   ↓
 Success? → Return response
   ↓
@@ -306,6 +320,34 @@ Common errors:
 
 ---
 
+## Stagehand Integration
+
+Stagehand (used in TestAgent for browser automation) routes all AI requests through AI Gateway:
+
+```typescript
+// In TestAgent.ts
+const llmClient = new WorkersAIClient(this.env.AI, {
+  gateway: {
+    id: 'ai-gateway-gameeval'
+  }
+});
+
+const stagehand = new Stagehand({
+  env: 'LOCAL',
+  localBrowserLaunchOptions: { cdpUrl: endpointURLString(this.env.BROWSER) },
+  llmClient,
+  // ... other options
+});
+```
+
+All `observe()` and `act()` calls made by Stagehand now route through AI Gateway, providing:
+- Full observability of Stagehand's AI usage
+- Request caching for repeated patterns
+- Cost tracking for browser automation AI calls
+- Unified monitoring across all AI providers
+
+Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
+
 ## Future Enhancements
 
 - Add Anthropic Claude 3.5 Sonnet fallback
@@ -316,9 +358,49 @@ Common errors:
 
 ---
 
+## Complete AI Gateway Integration Status
+
+All AI calls in the system now route through AI Gateway (`ai-gateway-gameeval`):
+
+### ✅ Workers AI Calls (Primary Provider)
+
+1. **Stagehand Browser Automation** (`WorkersAIClient`)
+   - Location: `src/shared/helpers/workersAIClient.ts`
+   - Routes through: Gateway config passed to `this.binding.run()`
+   - Used by: TestAgent phases (observe/act calls)
+   
+2. **Direct AI Helper** (`callAI()` → `callWorkersAI()`)
+   - Location: `src/shared/helpers/ai-gateway.ts`
+   - Routes through: Gateway config passed to `env.AI.run()`
+   - Used by: Phase 4 evaluation, any direct AI requests
+
+### ✅ OpenAI Calls (Fallback Provider)
+
+3. **OpenAI Fallback** (`callAIGatewayOpenAI()`)
+   - Location: `src/shared/helpers/ai-gateway.ts`
+   - Routes through: `https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/openai/...`
+   - Used by: Automatic fallback when Workers AI fails
+
+### Gateway Configuration
+
+**Gateway Name**: `ai-gateway-gameeval`  
+**Account ID**: `a20259cba74e506296745f9c67c1f3bc`
+
+All requests include gateway metadata in logs for tracking:
+```json
+{
+  "provider": "workers-ai",
+  "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "gateway": "ai-gateway-gameeval",
+  "latency_ms": 1234,
+  "cost": 0
+}
+```
+
 ## References
 
 - **Cloudflare AI Gateway**: https://developers.cloudflare.com/ai-gateway/
+- **Stagehand with AI Gateway**: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
 - **Workers AI**: https://developers.cloudflare.com/workers-ai/
 - **Dynamic Routing**: https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/
 - **OpenAI API**: https://platform.openai.com/docs/api-reference

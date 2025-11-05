@@ -130,12 +130,13 @@ async function callWorkersAI(
         testRunId,
         'ai',
         EventType.AI_REQUEST_START,
-        `Calling Workers AI ${model} (${prompt.length} chars, ${images?.length || 0} images)`,
+        `Calling Workers AI ${model} via AI Gateway (${prompt.length} chars, ${images?.length || 0} images)`,
         JSON.stringify({
           provider: 'workers-ai',
           model,
           prompt_length: prompt.length,
           image_count: images?.length || 0,
+          gateway: AI_GATEWAY_CONFIG.GATEWAY_NAME,
           ...customMetadata,
         })
       );
@@ -154,12 +155,18 @@ async function callWorkersAI(
       );
     }
     
-    // Call Workers AI with timeout
+    // Call Workers AI with timeout, routing through AI Gateway
+    // Reference: https://developers.cloudflare.com/ai-gateway/
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error('Workers AI timeout')), AI_GATEWAY_CONFIG.PRIMARY_TIMEOUT_MS);
     });
     
-    const aiPromise = env.AI.run(model, requestOptions);
+    // Route through AI Gateway for observability, caching, and cost tracking
+    const aiPromise = env.AI.run(model, requestOptions, {
+      gateway: {
+        id: AI_GATEWAY_CONFIG.GATEWAY_NAME
+      }
+    });
     const result = await Promise.race([aiPromise, timeoutPromise]) as AiTextGenerationOutput;
     
     const latency = Date.now() - startTime;
@@ -190,12 +197,13 @@ async function callWorkersAI(
         testRunId,
         'ai',
         EventType.AI_REQUEST_COMPLETE,
-        `Workers AI responded (${latency}ms, $0.00)`,
+        `Workers AI via AI Gateway responded (${latency}ms, $0.00)`,
         JSON.stringify({
           provider: 'workers-ai',
           model,
           latency_ms: latency,
           cost: 0,
+          gateway: AI_GATEWAY_CONFIG.GATEWAY_NAME,
           ...customMetadata,
         })
       );
