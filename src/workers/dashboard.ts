@@ -6,8 +6,10 @@
  * Implements RPC method submitTest() that validates inputs, generates UUID, triggers Workflow.
  */
 
-import type { SubmitTestRequest, SubmitTestResponse, TestRunSummary } from '../shared/types';
-import { listRecentTests, getTestEvents, createTestRun } from '../shared/helpers/d1';
+import type { SubmitTestRequest, SubmitTestResponse, TestRunSummary, TestReport, MetricScore } from '../shared/types';
+import { listRecentTests, getTestEvents, createTestRun, getTestById, getEvaluationScores } from '../shared/helpers/d1';
+import { getTestArtifacts } from '../shared/helpers/r2';
+import { LogType } from '../shared/constants';
 
 /**
  * Sanitize error messages (Story 2.7)
@@ -86,6 +88,75 @@ export default {
         return Response.json(result);
       } catch (error) {
         console.error('RPC listTests error:', error);
+        return Response.json(
+          { error: sanitizeErrorMessage(error) },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Route: Handle RPC getTestReport endpoint (Story 3.4)
+    if (url.pathname === '/rpc/getTestReport' && request.method === 'GET') {
+      try {
+        const testId = url.searchParams.get('testId');
+        if (!testId) {
+          return Response.json(
+            { error: 'testId query parameter is required' },
+            { status: 400 }
+          );
+        }
+        
+        // Validate testId is UUID format
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidPattern.test(testId)) {
+          return Response.json(
+            { error: 'Invalid testId format (must be UUID)' },
+            { status: 400 }
+          );
+        }
+        
+        const result = await getTestReport(env, testId);
+        return Response.json(result);
+      } catch (error) {
+        console.error('RPC getTestReport error:', error);
+        return Response.json(
+          { error: sanitizeErrorMessage(error) },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Route: Handle RPC exportTestJSON endpoint (Story 3.4)
+    if (url.pathname === '/rpc/exportTestJSON' && request.method === 'GET') {
+      try {
+        const testId = url.searchParams.get('testId');
+        if (!testId) {
+          return Response.json(
+            { error: 'testId query parameter is required' },
+            { status: 400 }
+          );
+        }
+        
+        // Validate testId is UUID format
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidPattern.test(testId)) {
+          return Response.json(
+            { error: 'Invalid testId format (must be UUID)' },
+            { status: 400 }
+          );
+        }
+        
+        const testReport = await getTestReport(env, testId);
+        const jsonString = JSON.stringify(testReport, null, 2);
+        
+        return new Response(jsonString, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Disposition': `attachment; filename="test-${testId}.json"`,
+          },
+        });
+      } catch (error) {
+        console.error('RPC exportTestJSON error:', error);
         return Response.json(
           { error: sanitizeErrorMessage(error) },
           { status: 500 }
@@ -280,6 +351,170 @@ async function listTests(env: Env): Promise<TestRunSummary[]> {
   }
 
   return summaries;
+}
+
+/**
+ * RPC method: Get complete test report with all details
+ * Story 3.4: Detailed Test Report View
+ * 
+ * Queries D1 for test_runs, evaluation_scores, test_events tables
+ * and R2 for screenshots and logs. Joins all data into TestReport object.
+ * 
+ * @param env - Environment bindings (DB, EVIDENCE_BUCKET, etc.)
+ * @param testId - Test run UUID
+ * @returns Complete TestReport object
+ * @throws Error if test not found or database/R2 queries fail
+ */
+async function getTestReport(env: Env, testId: string): Promise<TestReport> {
+  // Query test run from D1
+  const testResult = await getTestById(env.DB, testId);
+  
+  if (!testResult.success) {
+    throw new Error(testResult.error);
+  }
+  
+  if (!testResult.data) {
+    throw new Error('Test not found');
+  }
+  
+  const test = testResult.data;
+  
+  // Query evaluation scores from D1
+  const scoresResult = await getEvaluationScores(env.DB, testId);
+  if (!scoresResult.success) {
+    throw new Error(scoresResult.error);
+  }
+  
+  // Transform evaluation scores to MetricScore format
+  const metrics: MetricScore[] = scoresResult.data.map(score => ({
+    name: score.metric_name,
+    score: score.score,
+    justification: score.justification,
+  }));
+  
+  // Query test events from D1
+  const eventsResult = await getTestEvents(env.DB, testId);
+  if (!eventsResult.success) {
+    throw new Error(eventsResult.error);
+  }
+  
+  // Query artifacts from R2
+  const artifactsResult = await getTestArtifacts(env.EVIDENCE_BUCKET, testId, env);
+  
+  // Handle R2 query failure gracefully (test may not have artifacts yet)
+  let screenshots: Array<{ url: string; phase: string; description: string; timestamp: number }> = [];
+  let consoleLogs: string[] = [];
+  let networkErrors: Array<{ timestamp: number; url: string; status?: number; error: string }> = [];
+  
+  if (artifactsResult.success) {
+    // Extract screenshots
+    screenshots = artifactsResult.data
+      .filter(artifact => artifact.type === 'screenshot')
+      .map(artifact => {
+        if (artifact.type !== 'screenshot') {
+          throw new Error('Unexpected artifact type');
+        }
+        return {
+          url: artifact.url,
+          phase: artifact.metadata.phase,
+          description: artifact.metadata.action.replace(/-/g, ' '), // Convert 'click-play-button' to 'click play button'
+          timestamp: artifact.metadata.timestamp,
+        };
+      });
+    
+    // Extract console logs
+    const consoleLogArtifact = artifactsResult.data.find(
+      artifact => artifact.type === 'log' && artifact.metadata.logType === LogType.CONSOLE
+    );
+    
+    if (consoleLogArtifact && consoleLogArtifact.type === 'log') {
+      try {
+        // Fetch console log content from R2
+        const consoleLogObj = await env.EVIDENCE_BUCKET.get(consoleLogArtifact.key);
+        if (consoleLogObj) {
+          const consoleLogText = await consoleLogObj.text();
+          consoleLogs = consoleLogText.split('\n').filter(line => line.trim() !== '');
+        }
+      } catch (error) {
+        console.error('Failed to fetch console log:', error);
+        // Continue without console logs
+      }
+    }
+    
+    // Extract network errors (parse from network log)
+    const networkLogArtifact = artifactsResult.data.find(
+      artifact => artifact.type === 'log' && artifact.metadata.logType === LogType.NETWORK
+    );
+    
+    if (networkLogArtifact && networkLogArtifact.type === 'log') {
+      try {
+        // Fetch network log content from R2
+        const networkLogObj = await env.EVIDENCE_BUCKET.get(networkLogArtifact.key);
+        if (networkLogObj) {
+          const networkLogText = await networkLogObj.text();
+          // Parse network errors from log (simple line-based parsing)
+          // Expected format: "timestamp|url|status|error"
+          const lines = networkLogText.split('\n').filter(line => line.trim() !== '');
+          networkErrors = lines.map(line => {
+            const parts = line.split('|');
+            return {
+              timestamp: parseInt(parts[0], 10),
+              url: parts[1] || 'Unknown URL',
+              status: parts[2] ? parseInt(parts[2], 10) : undefined,
+              error: parts[3] || 'Network error',
+            };
+          }).filter(err => !isNaN(err.timestamp)); // Filter out invalid entries
+        }
+      } catch (error) {
+        console.error('Failed to fetch network log:', error);
+        // Continue without network errors
+      }
+    }
+  }
+  
+  // Calculate duration
+  let duration: number | null = null;
+  if (test.completed_at) {
+    duration = test.completed_at - test.created_at;
+  }
+  
+  // Extract AI model from test events metadata (if available)
+  let aiModel: string | undefined;
+  for (const event of eventsResult.data) {
+    if (event.metadata) {
+      try {
+        const metadata = JSON.parse(event.metadata);
+        if (metadata.model) {
+          aiModel = metadata.model;
+          break; // Use first model found
+        }
+      } catch {
+        // Skip invalid metadata
+      }
+    }
+  }
+  
+  // Build TestReport object
+  const testReport: TestReport = {
+    id: test.id,
+    url: test.url,
+    inputSchema: test.input_schema || undefined,
+    status: test.status,
+    overallScore: test.overall_score,
+    metrics,
+    screenshots,
+    events: eventsResult.data,
+    consoleLogs,
+    networkErrors,
+    timestamps: {
+      createdAt: test.created_at,
+      completedAt: test.completed_at,
+      duration,
+    },
+    aiModel,
+  };
+  
+  return testReport;
 }
 
 /**
@@ -785,6 +1020,387 @@ function getHTML(): string {
       50% { opacity: 0.5; }
     }
 
+    /* Detailed Report View Styles (Story 3.4) */
+    .detailed-report-loading,
+    .detailed-report-error {
+      text-align: center;
+      padding: 20px;
+      color: #b0b0b0;
+      font-size: 0.9em;
+    }
+
+    .detailed-report-error {
+      color: #ff4444;
+    }
+
+    .detailed-report-content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .report-section {
+      background: #222;
+      border-radius: 6px;
+      padding: 15px;
+    }
+
+    .report-section-title {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #FF6B35;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #3a3a3a;
+      padding-bottom: 8px;
+    }
+
+    .overall-score-section {
+      text-align: center;
+      padding: 20px;
+    }
+
+    .overall-score-value {
+      font-size: 3em;
+      font-weight: 700;
+      margin: 10px 0;
+    }
+
+    .score-green { color: #4CAF50; }
+    .score-yellow { color: #FFC107; }
+    .score-red { color: #F44336; }
+
+    .metric-item {
+      margin-bottom: 15px;
+    }
+
+    .metric-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .metric-name {
+      font-weight: 600;
+      color: #f0f0f0;
+      text-transform: capitalize;
+    }
+
+    .metric-score {
+      font-weight: 700;
+      color: #FF6B35;
+    }
+
+    .metric-progress-bar {
+      height: 8px;
+      background: #1a1a1a;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .metric-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #FF6B35 0%, #FF8555 100%);
+      transition: width 0.5s ease;
+    }
+
+    .metric-justification {
+      font-size: 0.9em;
+      color: #b0b0b0;
+      line-height: 1.5;
+    }
+
+    .timeline-list {
+      max-height: 300px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .timeline-event {
+      padding: 10px;
+      background: #1a1a1a;
+      border-left: 3px solid #FF6B35;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+
+    .timeline-timestamp {
+      color: #888;
+      font-size: 0.85em;
+      margin-right: 8px;
+    }
+
+    .timeline-phase {
+      color: #FF6B35;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+
+    .screenshot-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+    }
+
+    .screenshot-item {
+      cursor: pointer;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 2px solid #3a3a3a;
+      transition: all 0.2s ease;
+    }
+
+    .screenshot-item:hover {
+      border-color: #FF6B35;
+      transform: scale(1.05);
+    }
+
+    .screenshot-img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .screenshot-caption {
+      padding: 8px;
+      background: #1a1a1a;
+      font-size: 0.85em;
+      color: #b0b0b0;
+    }
+
+    .screenshot-caption-phase {
+      color: #FF6B35;
+      font-weight: 600;
+    }
+
+    /* Lightbox Modal */
+    .lightbox-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .lightbox-modal.active {
+      display: flex;
+    }
+
+    .lightbox-content {
+      position: relative;
+      max-width: 90%;
+      max-height: 90%;
+    }
+
+    .lightbox-img {
+      max-width: 100%;
+      max-height: 90vh;
+      display: block;
+      border-radius: 8px;
+    }
+
+    .lightbox-nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 107, 53, 0.8);
+      color: #fff;
+      border: none;
+      padding: 15px 20px;
+      font-size: 1.5em;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background 0.2s ease;
+    }
+
+    .lightbox-nav-btn:hover {
+      background: rgba(255, 107, 53, 1);
+    }
+
+    .lightbox-prev {
+      left: 20px;
+    }
+
+    .lightbox-next {
+      right: 20px;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 107, 53, 0.8);
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1.2em;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background 0.2s ease;
+    }
+
+    .lightbox-close:hover {
+      background: rgba(255, 107, 53, 1);
+    }
+
+    .lightbox-caption {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: #f0f0f0;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 0.9em;
+    }
+
+    .log-section-toggle {
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 4px;
+      transition: background 0.2s ease;
+    }
+
+    .log-section-toggle:hover {
+      background: #2a2a2a;
+    }
+
+    .log-section-toggle-icon {
+      transition: transform 0.2s ease;
+    }
+
+    .log-section-toggle.expanded .log-section-toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .log-section-content {
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 10px;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 4px;
+      font-family: 'Courier New', Monaco, monospace;
+      font-size: 0.85em;
+      line-height: 1.6;
+    }
+
+    .log-section-content.expanded {
+      display: block;
+    }
+
+    .log-line {
+      padding: 2px 0;
+      color: #d0d0d0;
+    }
+
+    .log-line-error {
+      color: #ff4444;
+    }
+
+    .network-error-item {
+      padding: 8px;
+      margin-bottom: 6px;
+      background: #1a1a1a;
+      border-left: 3px solid #ff4444;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+
+    .network-error-url {
+      font-family: 'Courier New', Monaco, monospace;
+      color: #f0f0f0;
+      word-break: break-all;
+    }
+
+    .network-error-status {
+      color: #ff4444;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+
+    .export-json-btn {
+      padding: 10px 20px;
+      background: #FF6B35;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-top: 10px;
+    }
+
+    .export-json-btn:hover {
+      background: #ff8555;
+      transform: translateY(-2px);
+    }
+
+    .close-report-btn {
+      padding: 10px 20px;
+      background: #3a3a3a;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-top: 10px;
+    }
+
+    .close-report-btn:hover {
+      background: #4a4a4a;
+      transform: translateY(-2px);
+    }
+
+    .report-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .report-metadata {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      font-size: 0.9em;
+      color: #b0b0b0;
+    }
+
+    .report-metadata-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .report-metadata-label {
+      color: #888;
+      font-size: 0.85em;
+    }
+
+    .report-metadata-value {
+      color: #f0f0f0;
+      font-family: 'Courier New', Monaco, monospace;
+    }
+
     /* Responsive layout for desktop */
     @media (min-width: 768px) {
       .container {
@@ -855,6 +1471,17 @@ function getHTML(): string {
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Lightbox Modal for Screenshots (Story 3.4) -->
+  <div class="lightbox-modal" id="lightboxModal">
+    <button class="lightbox-close" id="lightboxClose">✕</button>
+    <button class="lightbox-nav-btn lightbox-prev" id="lightboxPrev">‹</button>
+    <div class="lightbox-content">
+      <img class="lightbox-img" id="lightboxImg" src="" alt="Screenshot">
+      <div class="lightbox-caption" id="lightboxCaption"></div>
+    </div>
+    <button class="lightbox-nav-btn lightbox-next" id="lightboxNext">›</button>
   </div>
 
   <script>
@@ -1119,8 +1746,15 @@ function getHTML(): string {
               </div>
             </div>
             <div class="test-card-details" id="details-\${test.id}">
-              <p><strong>Test ID:</strong> \${test.id}</p>
-              <p><em>Detailed report view will be implemented in Story 3.4</em></p>
+              <div class="detailed-report-loading" id="report-loading-\${test.id}">
+                Loading test report...
+              </div>
+              <div class="detailed-report-error" id="report-error-\${test.id}" style="display: none;">
+                Failed to load test report
+              </div>
+              <div class="detailed-report-content" id="report-content-\${test.id}" style="display: none;">
+                <!-- Detailed report will be rendered here by JavaScript -->
+              </div>
             </div>
           </div>
         \`;
@@ -1144,11 +1778,24 @@ function getHTML(): string {
         }
       });
 
-      // Restore expanded state for test details
+      // Restore expanded state for test details and re-render cached reports
       expandedDetails.forEach(testId => {
         const details = document.getElementById(\`details-\${testId}\`);
         if (details) {
           details.classList.add('expanded');
+          
+          // If we have a cached report, re-render it
+          const cachedReport = loadedReports.get(testId);
+          if (cachedReport) {
+            const loadingEl = document.getElementById(\`report-loading-\${testId}\`);
+            const contentEl = document.getElementById(\`report-content-\${testId}\`);
+            
+            if (loadingEl && contentEl) {
+              loadingEl.style.display = 'none';
+              contentEl.style.display = 'block';
+              renderTestReport(testId, cachedReport);
+            }
+          }
         }
       });
 
@@ -1156,8 +1803,8 @@ function getHTML(): string {
       const cards = testListContainer.querySelectorAll('.test-card');
       cards.forEach(card => {
         card.addEventListener('click', (e) => {
-          // Don't toggle details if clicking on Live Feed toggle
-          if (e.target.closest('.live-feed-toggle')) {
+          // Don't toggle details if clicking on Live Feed toggle or inside detailed report content
+          if (e.target.closest('.live-feed-toggle') || e.target.closest('.detailed-report-content')) {
             return;
           }
           
@@ -1170,9 +1817,369 @@ function getHTML(): string {
           } else {
             details.classList.add('expanded');
             expandedDetails.add(testId);
+            // Load test report when expanding (Story 3.4)
+            loadTestReport(testId);
           }
         });
       });
+    }
+
+    // Click-outside handler for closing detailed reports (AC-7)
+    document.addEventListener('click', (e) => {
+      // Check if click is outside any expanded test card
+      const clickedCard = e.target.closest('.test-card');
+      const clickedLightbox = e.target.closest('.lightbox-modal');
+      
+      // Don't close if clicking inside a test card or lightbox
+      if (clickedCard || clickedLightbox) {
+        return;
+      }
+      
+      // Close all expanded details
+      expandedDetails.forEach(testId => {
+        const details = document.getElementById(\`details-\${testId}\`);
+        if (details) {
+          details.classList.remove('expanded');
+        }
+      });
+      expandedDetails.clear();
+    });
+
+    // Test Report Loading and Rendering (Story 3.4)
+    const loadedReports = new Map(); // Cache loaded reports to avoid re-fetching
+
+    // Load test report from RPC
+    async function loadTestReport(testId) {
+      // Skip if already loaded
+      if (loadedReports.has(testId)) {
+        return;
+      }
+
+      const loadingEl = document.getElementById(\`report-loading-\${testId}\`);
+      const errorEl = document.getElementById(\`report-error-\${testId}\`);
+      const contentEl = document.getElementById(\`report-content-\${testId}\`);
+
+      if (!loadingEl || !errorEl || !contentEl) {
+        return;
+      }
+
+      // Show loading state
+      loadingEl.style.display = 'block';
+      errorEl.style.display = 'none';
+      contentEl.style.display = 'none';
+
+      try {
+        const response = await fetch(\`/rpc/getTestReport?testId=\${testId}\`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to load test report');
+        }
+
+        const testReport = await response.json();
+        
+        // Cache the report
+        loadedReports.set(testId, testReport);
+
+        // Render the report
+        renderTestReport(testId, testReport);
+
+        // Show content, hide loading
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+      } catch (error) {
+        console.error('Failed to load test report:', error);
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'block';
+        errorEl.textContent = error.message || 'Failed to load test report';
+      }
+    }
+
+    // Render complete test report
+    function renderTestReport(testId, report) {
+      const contentEl = document.getElementById(\`report-content-\${testId}\`);
+      if (!contentEl) return;
+
+      // Build HTML for all report sections
+      let html = '';
+
+      // Overall Score Section
+      if (report.overallScore !== null && report.overallScore !== undefined) {
+        const scoreClass = report.overallScore > 70 ? 'score-green' : report.overallScore >= 50 ? 'score-yellow' : 'score-red';
+        html += \`
+          <div class="report-section overall-score-section">
+            <div class="report-section-title">Overall Quality Score</div>
+            <div class="overall-score-value \${scoreClass}">\${report.overallScore}/100</div>
+          </div>
+        \`;
+      }
+
+      // Metrics Section
+      if (report.metrics && report.metrics.length > 0) {
+        html += '<div class="report-section"><div class="report-section-title">Individual Metrics</div>';
+        report.metrics.forEach(metric => {
+          const progress = metric.score;
+          html += \`
+            <div class="metric-item">
+              <div class="metric-header">
+                <span class="metric-name">\${metric.name}</span>
+                <span class="metric-score">\${metric.score}/100</span>
+              </div>
+              <div class="metric-progress-bar">
+                <div class="metric-progress-fill" style="width: \${progress}%"></div>
+              </div>
+              <div class="metric-justification">\${metric.justification}</div>
+            </div>
+          \`;
+        });
+        html += '</div>';
+      }
+
+      // Timeline Section
+      if (report.events && report.events.length > 0) {
+        html += '<div class="report-section"><div class="report-section-title">Timeline of AI Actions</div><div class="timeline-list">';
+        report.events.forEach(event => {
+          const timestamp = new Date(event.timestamp).toLocaleTimeString();
+          html += \`
+            <div class="timeline-event">
+              <span class="timeline-timestamp">\${timestamp}</span>
+              <span class="timeline-phase">\${event.phase}</span>
+              <span>\${event.description}</span>
+            </div>
+          \`;
+        });
+        html += '</div></div>';
+      }
+
+      // Screenshot Gallery Section
+      if (report.screenshots && report.screenshots.length > 0) {
+        html += '<div class="report-section"><div class="report-section-title">Screenshot Gallery</div><div class="screenshot-gallery">';
+        report.screenshots.forEach((screenshot, index) => {
+          html += \`
+            <div class="screenshot-item" onclick="openLightbox('\${testId}', \${index})">
+              <img class="screenshot-img" src="\${screenshot.url}" alt="\${screenshot.description}" loading="lazy">
+              <div class="screenshot-caption">
+                <span class="screenshot-caption-phase">\${screenshot.phase}:</span>
+                \${screenshot.description}
+              </div>
+            </div>
+          \`;
+        });
+        html += '</div></div>';
+      }
+
+      // Console Error Log Section
+      if (report.consoleLogs && report.consoleLogs.length > 0) {
+        html += \`
+          <div class="report-section">
+            <div class="report-section-title">Console Errors</div>
+            <div class="log-section-toggle" onclick="toggleLogSection('\${testId}-console')">
+              <span>View Console Log (\${report.consoleLogs.length} lines)</span>
+              <span class="log-section-toggle-icon">▼</span>
+            </div>
+            <div class="log-section-content" id="log-\${testId}-console">
+        \`;
+        report.consoleLogs.forEach(line => {
+          const isError = line.toLowerCase().includes('error');
+          html += \`<div class="log-line \${isError ? 'log-line-error' : ''}">\${escapeHtml(line)}</div>\`;
+        });
+        html += '</div></div>';
+      }
+
+      // Network Error Log Section
+      if (report.networkErrors && report.networkErrors.length > 0) {
+        html += \`
+          <div class="report-section">
+            <div class="report-section-title">Network Errors</div>
+            <div class="log-section-toggle" onclick="toggleLogSection('\${testId}-network')">
+              <span>View Network Errors (\${report.networkErrors.length} errors)</span>
+              <span class="log-section-toggle-icon">▼</span>
+            </div>
+            <div class="log-section-content" id="log-\${testId}-network">
+        \`;
+        report.networkErrors.forEach(error => {
+          html += \`
+            <div class="network-error-item">
+              <span class="network-error-status">\${error.status || 'ERROR'}</span>
+              <span class="network-error-url">\${error.url}</span>
+              <div>\${error.error}</div>
+            </div>
+          \`;
+        });
+        html += '</div></div>';
+      }
+
+      // Metadata Section (AC-2: Test duration and timestamp)
+      html += '<div class="report-section"><div class="report-section-title">Test Metadata</div><div class="report-metadata">';
+      html += \`
+        <div class="report-metadata-item">
+          <div class="report-metadata-label">Test ID</div>
+          <div class="report-metadata-value">\${report.id}</div>
+        </div>
+      \`;
+      
+      // Created timestamp
+      const createdDate = new Date(report.timestamps.createdAt);
+      html += \`
+        <div class="report-metadata-item">
+          <div class="report-metadata-label">Created</div>
+          <div class="report-metadata-value">\${createdDate.toLocaleString()}</div>
+        </div>
+      \`;
+      
+      // Completed timestamp
+      if (report.timestamps.completedAt) {
+        const completedDate = new Date(report.timestamps.completedAt);
+        html += \`
+          <div class="report-metadata-item">
+            <div class="report-metadata-label">Completed</div>
+            <div class="report-metadata-value">\${completedDate.toLocaleString()}</div>
+          </div>
+        \`;
+      }
+      
+      // Duration
+      if (report.timestamps.duration) {
+        const duration = formatDuration(report.timestamps.duration);
+        html += \`
+          <div class="report-metadata-item">
+            <div class="report-metadata-label">Duration</div>
+            <div class="report-metadata-value">\${duration}</div>
+          </div>
+        \`;
+      }
+      
+      // AI Model
+      if (report.aiModel) {
+        html += \`
+          <div class="report-metadata-item">
+            <div class="report-metadata-label">AI Model</div>
+            <div class="report-metadata-value">\${report.aiModel}</div>
+          </div>
+        \`;
+      }
+      html += '</div></div>';
+
+      // Action Buttons (Export and Close)
+      html += \`
+        <div class="report-actions">
+          <button class="export-json-btn" onclick="exportTestJSON('\${testId}')">
+            Export Test Report JSON
+          </button>
+          <button class="close-report-btn" onclick="closeDetailedReport('\${testId}')">
+            Close Report
+          </button>
+        </div>
+      \`;
+
+      contentEl.innerHTML = html;
+    }
+
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Toggle log section expansion
+    function toggleLogSection(logId) {
+      const toggle = document.querySelector(\`.log-section-toggle[onclick*="\${logId}"]\`);
+      const content = document.getElementById(\`log-\${logId}\`);
+      
+      if (toggle && content) {
+        toggle.classList.toggle('expanded');
+        content.classList.toggle('expanded');
+      }
+    }
+
+    // Lightbox functionality for screenshot gallery
+    let currentLightboxTestId = null;
+    let currentLightboxIndex = 0;
+
+    function openLightbox(testId, index) {
+      const report = loadedReports.get(testId);
+      if (!report || !report.screenshots || !report.screenshots[index]) {
+        return;
+      }
+
+      currentLightboxTestId = testId;
+      currentLightboxIndex = index;
+
+      const modal = document.getElementById('lightboxModal');
+      const img = document.getElementById('lightboxImg');
+      const caption = document.getElementById('lightboxCaption');
+
+      const screenshot = report.screenshots[index];
+      img.src = screenshot.url;
+      caption.textContent = \`\${screenshot.phase}: \${screenshot.description}\`;
+
+      modal.classList.add('active');
+    }
+
+    function closeLightbox() {
+      const modal = document.getElementById('lightboxModal');
+      modal.classList.remove('active');
+      currentLightboxTestId = null;
+    }
+
+    function navigateLightbox(direction) {
+      if (!currentLightboxTestId) return;
+
+      const report = loadedReports.get(currentLightboxTestId);
+      if (!report || !report.screenshots) return;
+
+      currentLightboxIndex += direction;
+
+      // Wrap around
+      if (currentLightboxIndex < 0) {
+        currentLightboxIndex = report.screenshots.length - 1;
+      } else if (currentLightboxIndex >= report.screenshots.length) {
+        currentLightboxIndex = 0;
+      }
+
+      const img = document.getElementById('lightboxImg');
+      const caption = document.getElementById('lightboxCaption');
+      const screenshot = report.screenshots[currentLightboxIndex];
+
+      img.src = screenshot.url;
+      caption.textContent = \`\${screenshot.phase}: \${screenshot.description}\`;
+    }
+
+    // Lightbox event listeners
+    document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
+    document.getElementById('lightboxPrev').addEventListener('click', () => navigateLightbox(-1));
+    document.getElementById('lightboxNext').addEventListener('click', () => navigateLightbox(1));
+
+    // Close lightbox on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeLightbox();
+      } else if (e.key === 'ArrowLeft') {
+        navigateLightbox(-1);
+      } else if (e.key === 'ArrowRight') {
+        navigateLightbox(1);
+      }
+    });
+
+    // Close lightbox when clicking outside image
+    document.getElementById('lightboxModal').addEventListener('click', (e) => {
+      if (e.target.id === 'lightboxModal') {
+        closeLightbox();
+      }
+    });
+
+    // Export test report as JSON
+    function exportTestJSON(testId) {
+      window.location.href = \`/rpc/exportTestJSON?testId=\${testId}\`;
+    }
+
+    // Close detailed report view (AC-7)
+    function closeDetailedReport(testId) {
+      const details = document.getElementById(\`details-\${testId}\`);
+      if (details) {
+        details.classList.remove('expanded');
+        expandedDetails.delete(testId);
+      }
     }
 
     // Poll test list

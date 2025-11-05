@@ -379,3 +379,54 @@ export interface WebSocketMessage {
   data?: any;
 }
 
+/**
+ * Screenshot with URL for test report view (Story 3.4)
+ */
+export interface TestReportScreenshot {
+  /** Public URL for screenshot */
+  url: string;
+  /** Test pipeline phase (phase1-phase4) */
+  phase: string;
+  /** Human-readable description */
+  description: string;
+  /** Screenshot timestamp (Unix epoch in milliseconds) */
+  timestamp: number;
+}
+
+/**
+ * Complete test report structure for detailed test report view (Story 3.4)
+ */
+export interface TestReport {
+  /** Test run UUID */
+  id: string;
+  /** Game URL being tested */
+  url: string;
+  /** Optional input schema JSON string */
+  inputSchema?: string;
+  /** Test status (queued, running, completed, failed) */
+  status: string;
+  /** Overall quality score (0-100) */
+  overallScore: number | null;
+  /** Array of 5 individual metric scores with justifications */
+  metrics: MetricScore[];
+  /** Array of screenshot metadata with URLs */
+  screenshots: TestReportScreenshot[];
+  /** Array of test events (timeline of AI actions) */
+  events: TestEvent[];
+  /** Console logs as array of strings */
+  consoleLogs: string[];
+  /** Network errors encountered during test */
+  networkErrors: NetworkError[];
+  /** Test timestamps */
+  timestamps: {
+    /** Test creation timestamp (Unix epoch in milliseconds) */
+    createdAt: number;
+    /** Test completion timestamp (Unix epoch in milliseconds, null if not completed) */
+    completedAt: number | null;
+    /** Test duration in milliseconds (null if not completed) */
+    duration: number | null;
+  };
+  /** AI model used for evaluation (if available) */
+  aiModel?: string;
+}
+

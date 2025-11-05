@@ -14,3 +14,9 @@ Routing guidance:
 | 2025-11-04 | 1.4 | 1 | Bug | High | TBD | Open | Check `DbResult` outcomes when writing status/events to D1 (`src/workflows/GameTestPipeline.ts`) |
 | 2025-11-04 | 1.4 | 1 | TechDebt | Medium | TBD | Open | Revisit per-phase timeouts so total runtime stays under six minutes (`src/workflows/GameTestPipeline.ts`) |
 
+Adam's human notes to add to the backlog:
+- AI Gateway isn't being utilized at all, we're doing pure Workers AI calls.
+- The live feed and Timeline are very similar.
+- Do we really need to hot reload with polling?
+- The screenshots don't work, bucket is empty despite the URLs on the logs.
+- We can deploy our own small games and test them with the system.
