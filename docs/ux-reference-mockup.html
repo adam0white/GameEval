@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameEval - UX Reference Mockup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        /* Agent Orange Theme Colors */
+        :root {
+            --primary: #f97316;
+            --primary-dark: #c2410c;
+            --success: #22c55e;
+            --error: #ef4444;
+            --info: #3b82f6;
+            --bg: #0a0a0a;
+            --surface: #161616;
+            --border: #333333;
+        }
+
+        .controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls-left h1 {
+            font-size: 1.25rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .controls-left p {
+            font-size: 0.85rem;
+            color: #999;
+        }
+
+        .controls-right {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .view-btn {
+            background: var(--surface);
+            color: #999;
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .view-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .view-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .mockup-container {
+            margin-top: 100px;
+            padding: 2rem;
+            max-width: 1600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        /* Shared Components */
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 0.95rem;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.95rem;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(249, 115, 22, 0.1);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-running {
+            background: rgba(249, 115, 22, 0.2);
+            color: #fb923c;
+        }
+
+        .status-completed {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+        }
+
+        .status-failed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+
+        .live-indicator {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Card Gallery View */
+        .card-gallery {
+            padding: 2rem 0;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-title {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-subtitle {
+            color: #999;
+            font-size: 1rem;
+        }
+
+        .quick-submit {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            max-width: 800px;
+        }
+
+        .quick-submit-label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+            color: #ccc;
+        }
+
+        .submit-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 0.75rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: white;
+            font-size: 0.95rem;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .test-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .test-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .card-thumbnail {
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            position: relative;
+        }
+
+        .card-content {
+            padding: 1.25rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .test-url {
+            font-weight: 500;
+            color: var(--primary);
+            font-size: 0.95rem;
+        }
+
+        .card-meta {
+            color: #999;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        .test-score {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        /* Table View */
+        .table-view {
+            padding: 2rem 0;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--surface);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .toolbar-left {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex: 1;
+        }
+
+        .search-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: #999;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .search-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .table-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 2fr 120px 100px 140px 100px;
+            gap: 1.5rem;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .table-row:hover {
+            background: rgba(249, 115, 22, 0.05);
+        }
+
+        .table-row:last-child {
+            border-bottom: none;
+        }
+
+        .table-header {
+            font-weight: 600;
+            color: #999;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: default;
+        }
+
+        .table-header:hover {
+            background: transparent;
+        }
+
+        .table-url {
+            font-weight: 500;
+        }
+
+        .table-duration {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        /* Agent Focus View */
+        .agent-focus {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: calc(100vh - 140px);
+            background: var(--surface);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .agent-header {
+            padding: 2rem;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .agent-status-line {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .agent-url {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.95rem;
+        }
+
+        .agent-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1rem;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .agent-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            overflow: hidden;
+        }
+
+        .feed-panel {
+            padding: 2rem;
+            overflow-y: auto;
+            background: var(--bg);
+        }
+
+        .screenshot-panel {
+            padding: 2rem;
+            overflow-y: auto;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+        }
+
+        .panel-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #ccc;
+        }
+
+        .feed-item {
+            padding: 0.75rem;
+            background: rgba(249, 115, 22, 0.05);
+            border-left: 2px solid var(--primary);
+            margin-bottom: 0.75rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #ccc;
+        }
+
+        .feed-time {
+            color: #666;
+            font-size: 0.75rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .screenshot-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .screenshot-item {
+            aspect-ratio: 16/9;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .screenshot-caption {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 0.75rem;
+            background: linear-gradient(transparent, rgba(0,0,0,0.9));
+            font-size: 0.8rem;
+            color: #ccc;
+        }
+
+        @media (max-width: 1024px) {
+            .card-grid {
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            }
+            .agent-content {
+                grid-template-columns: 1fr;
+            }
+            .screenshot-panel {
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="controls-left">
+            <h1>🎨 GameEval - Reference Mockup</h1>
+            <p>Implementation reference for the three-view architecture with Agent Orange theme</p>
+        </div>
+        <div class="controls-right">
+            <button class="view-btn active" onclick="showView('card')">Card Gallery</button>
+            <button class="view-btn" onclick="showView('table')">Table View</button>
+            <button class="view-btn" onclick="showView('focus')">Agent Focus</button>
+        </div>
+    </div>
+
+    <div class="mockup-container">
+        <!-- Card Gallery View (Default) -->
+        <div class="view active" id="card-view">
+            <div class="card-gallery">
+                <div class="page-header">
+                    <h1 class="page-title">GameEval QA Pipeline</h1>
+                    <p class="page-subtitle">Autonomous browser game testing powered by AI</p>
+                </div>
+
+                <div class="quick-submit">
+                    <div class="quick-submit-label">Start a new test</div>
+                    <div class="submit-row">
+                        <input type="text" class="url-input" placeholder="https://example.com/game.html">
+                        <button class="btn-primary">🚀 Start Test</button>
+                    </div>
+                </div>
+
+                <div class="card-grid">
+                    <!-- Running Test -->
+                    <div class="test-card" onclick="showView('focus')">
+                        <div class="card-thumbnail" style="background: linear-gradient(135deg, #c2410c 0%, #f97316 100%);">
+                            <span class="live-indicator" style="position: absolute; top: 1rem; right: 1rem; width: 12px; height: 12px;"></span>
+                            🎮
+                        </div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <span class="status-badge status-running">Running</span>
+                                <span style="color: #999; font-size: 0.85rem;">2m 13s</span>
+                            </div>
+                            <div class="test-url">https://imsoshalive.com/games/pong/</div>
+                            <div class="card-meta">Phase 2: Gameplay • 4 screenshots captured</div>
+                        </div>
+                    </div>
+
+                    <!-- Completed Test -->
+                    <div class="test-card">
+                        <div class="card-thumbnail" style="background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);">
+                            ✓
+                        </div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <span class="status-badge status-completed">Completed</span>
+                                <span class="test-score">87</span>
+                            </div>
+                            <div class="test-url">https://imsoshalive.com/games/snake/</div>
+                            <div class="card-meta">10 hours ago • 2m 21s • 6 screenshots</div>
+                        </div>
+                    </div>
+
+                    <!-- Another Completed Test -->
+                    <div class="test-card">
+                        <div class="card-thumbnail" style="background: linear-gradient(135deg, #7c2d12 0%, #ea580c 100%);">
+                            ✓
+                        </div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <span class="status-badge status-completed">Completed</span>
+                                <span class="test-score">92</span>
+                            </div>
+                            <div class="test-url">https://example.com/tetris/</div>
+                            <div class="card-meta">12 hours ago • 3m 45s • 8 screenshots</div>
+                        </div>
+                    </div>
+
+                    <!-- Failed Test Example -->
+                    <div class="test-card">
+                        <div class="card-thumbnail" style="background: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
+                            ✗
+                        </div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <span class="status-badge status-failed">Failed</span>
+                                <span style="color: #999; font-size: 0.85rem;">1m 05s</span>
+                            </div>
+                            <div class="test-url">https://example.com/broken-game/</div>
+                            <div class="card-meta">1 day ago • Error: Game failed to load</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table View -->
+        <div class="view" id="table-view">
+            <div class="table-view">
+                <div class="page-header">
+                    <h1 class="page-title">Test Runs</h1>
+                    <p class="page-subtitle">24 total tests • 1 running • 22 completed • 1 failed</p>
+                </div>
+
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <div class="submit-row" style="flex: 1; max-width: 500px;">
+                            <input type="text" class="url-input" placeholder="https://example.com/game.html">
+                            <button class="btn-primary" style="white-space: nowrap;">Start Test</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem;">
+                        <button class="search-btn">🔍 Search</button>
+                        <button class="search-btn">Sort: Recent ▼</button>
+                        <button class="search-btn">Filter</button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-row table-header">
+                        <div>Game URL</div>
+                        <div>Status</div>
+                        <div>Score</div>
+                        <div>Duration</div>
+                        <div>Actions</div>
+                    </div>
+
+                    <div class="table-row" onclick="showView('focus')">
+                        <div class="table-url">https://imsoshalive.com/games/pong/</div>
+                        <div><span class="status-badge status-running">Running</span></div>
+                        <div class="table-duration">—</div>
+                        <div class="table-duration">2m 13s</div>
+                        <div><button class="btn-secondary" style="padding: 0.375rem 0.75rem; font-size: 0.85rem;">View Live</button></div>
+                    </div>
+
+                    <div class="table-row">
+                        <div class="table-url">https://imsoshalive.com/games/snake/</div>
+                        <div><span class="status-badge status-completed">Completed</span></div>
+                        <div style="color: var(--success); font-weight: 700; font-size: 1.1rem;">87</div>
+                        <div class="table-duration">2m 21s</div>
+                        <div><button class="btn-secondary" style="padding: 0.375rem 0.75rem; font-size: 0.85rem;">Report</button></div>
+                    </div>
+
+                    <div class="table-row">
+                        <div class="table-url">https://example.com/tetris/</div>
+                        <div><span class="status-badge status-completed">Completed</span></div>
+                        <div style="color: var(--success); font-weight: 700; font-size: 1.1rem;">92</div>
+                        <div class="table-duration">3m 45s</div>
+                        <div><button class="btn-secondary" style="padding: 0.375rem 0.75rem; font-size: 0.85rem;">Report</button></div>
+                    </div>
+
+                    <div class="table-row">
+                        <div class="table-url">https://example.com/broken-game/</div>
+                        <div><span class="status-badge status-failed">Failed</span></div>
+                        <div class="table-duration">—</div>
+                        <div class="table-duration">1m 05s</div>
+                        <div><button class="btn-secondary" style="padding: 0.375rem 0.75rem; font-size: 0.85rem;">Details</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Focus View -->
+        <div class="view" id="focus-view">
+            <div class="agent-focus">
+                <div class="agent-header">
+                    <button class="back-btn" onclick="showView('card')">← Back to Dashboard</button>
+                    
+                    <div class="agent-status-line">
+                        <span class="live-indicator"></span>
+                        Agent is discovering game controls...
+                    </div>
+                    <div class="agent-url">https://imsoshalive.com/games/pong/</div>
+
+                    <div class="agent-metrics">
+                        <div class="metric-card">
+                            <div class="metric-label">Progress</div>
+                            <div class="metric-value">Phase 2</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Duration</div>
+                            <div class="metric-value">2m 13s</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Screenshots</div>
+                            <div class="metric-value">4</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Confidence</div>
+                            <div class="metric-value">87%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="agent-content">
+                    <div class="feed-panel">
+                        <div class="panel-header">Live Timeline</div>
+                        
+                        <div class="feed-item">
+                            <div class="feed-time">10:54:39 PM</div>
+                            Agent discovering game controls...
+                        </div>
+                        <div class="feed-item">
+                            <div class="feed-time">10:54:33 PM</div>
+                            Phase 2: Gameplay & Evaluation started
+                        </div>
+                        <div class="feed-item">
+                            <div class="feed-time">10:54:33 PM</div>
+                            Screenshot captured: phase1-initial-load
+                        </div>
+                        <div class="feed-item">
+                            <div class="feed-time">10:54:24 PM</div>
+                            Phase 1: Load & Validation started
+                        </div>
+                        <div class="feed-item">
+                            <div class="feed-time">10:54:24 PM</div>
+                            Test workflow initiated
+                        </div>
+                    </div>
+
+                    <div class="screenshot-panel">
+                        <div class="panel-header">Visual Evidence</div>
+                        
+                        <div class="screenshot-grid">
+                            <div class="screenshot-item" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
+                                🎮
+                                <div class="screenshot-caption">phase1: Initial load</div>
+                            </div>
+                            <div class="screenshot-item" style="background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);">
+                                🎯
+                                <div class="screenshot-caption">phase2: Controls discovered</div>
+                            </div>
+                            <div class="screenshot-item" style="background: linear-gradient(135deg, #c2410c 0%, #f97316 100%);">
+                                ⚡
+                                <div class="screenshot-caption">phase2: Gameplay active</div>
+                            </div>
+                            <div class="screenshot-item" style="background: linear-gradient(135deg, #7c2d12 0%, #ea580c 100%);">
+                                📊
+                                <div class="screenshot-caption">phase3: Evaluation</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showView(viewName) {
+            // Hide all views
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            
+            // Show selected view
+            const viewMap = {
+                'card': 'card-view',
+                'table': 'table-view',
+                'focus': 'focus-view'
+            };
+            
+            document.getElementById(viewMap[viewName]).classList.add('active');
+            
+            // Update button states
+            const buttons = document.querySelectorAll('.view-btn');
+            const buttonIndex = { 'card': 0, 'table': 1, 'focus': 2 };
+            buttons[buttonIndex[viewName]].classList.add('active');
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

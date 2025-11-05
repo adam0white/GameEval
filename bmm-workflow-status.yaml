@@ -38,7 +38,7 @@ workflow_status:
   prd: project-brief.md
   validate-prd: skipped
   create-epics-and-stories: docs/epics.md
-  create-design: conditional
+  create-design: docs/ux-design-specification.md
 
   # Phase 3: Solutioning
   create-architecture: docs/architecture.md
