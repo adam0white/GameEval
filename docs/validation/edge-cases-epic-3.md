@@ -14,11 +14,79 @@ This document captures all bugs, edge cases, and unexpected behaviors discovered
 
 **Overall Status:** _[To be updated after validation]_
 
-**Total Issues Found:** 0  
-- **P0 (Critical):** 0 - Block MVP launch
-- **P1 (Major):** 0 - Should fix soon
+**Total Issues Found:** 3 (All Fixed)  
+- **P0 (Critical):** 1 - Block MVP launch (FIXED)
+- **P1 (Major):** 2 - Should fix soon (FIXED)
 - **P2 (Minor):** 0 - Nice to have
 - **P3 (Low):** 0 - Future enhancement
+
+---
+
+## FIXES IMPLEMENTED (2025-11-06)
+
+### Issue EC3-001: Database Migration Not Applied (P0 - FIXED)
+- **Component:** D1 Database
+- **Description:** Migration 0005_add_error_message_to_test_runs.sql was not applied to local database
+- **Error:** `no such column: error_message: SQLITE_ERROR`
+- **Fix:** Applied migration using `npx wrangler d1 execute gameeval-db --local --file=migrations/0005_add_error_message_to_test_runs.sql`
+
+### Issue EC3-002: Workers AI 504 Timeouts (P1 - FIXED)
+- **Component:** Stagehand / OpenRouter
+- **Description:** Workers AI (@cf/meta/llama-3.2-11b-vision-instruct) experiencing 504 Gateway Timeout errors during control discovery
+- **Impact:** Phase 2 failing repeatedly, requiring multiple retries
+- **Fix:** Switched to OpenAI GPT-5-mini through OpenRouter (direct access, bypassing AI Gateway)
+- **Implementation:**
+  - Using OpenAI models through OpenRouter direct API (https://openrouter.ai/api/v1)
+  - Updated `TestAgent.launchBrowser()` to use `modelName: 'openai/gpt-5-mini'`
+  - OpenRouter API key stored as `OPENROUTER_API_KEY` secret (local: .dev.vars, production: wrangler secret)
+  - Better availability and cost efficiency via OpenRouter's infrastructure
+  - AI Gateway integration with Stagehand not currently supported
+  - Flow: Stagehand → OpenRouter → OpenAI
+
+### Issue EC3-003: Phase 1 Not Clicking Game Start Buttons (P1 - FIXED)
+- **Component:** TestAgent Phase 1
+- **Description:** Agent captured initial screenshot but didn't click "Run game" button before proceeding to Phase 2, causing black screen issues
+- **Impact:** Games with loading screens or start buttons not properly initialized before control discovery
+- **Fix:** Enhanced Phase 1 to detect and click start buttons automatically
+- **Implementation:**
+  - Added Stagehand `act()` call to find and click Run/Play/Start buttons
+  - Wait 3 seconds after clicking for game to load
+  - Capture second screenshot after game starts
+  - Log interaction in test_events for visibility
+
+### Issue EC3-004: Retry Attempts Not Clear in Live Feed (P1 - FIXED)
+- **Component:** TestAgent / Live Feed
+- **Description:** Phase retries happening but not obvious in live feed - same "Phase 2 started" message appeared 3 times without indication of retry attempts
+- **Impact:** User confusion about whether system is working or stuck
+- **Fix:** Added retry attempt tracking and clear retry messaging
+- **Implementation:**
+  - Added `phase1_attempts`, `phase2_attempts`, `phase3_attempts` counters in DO state
+  - Modified `executePhaseNLogic()` methods to show "Phase N started (Retry attempt 2/3)" messages
+  - Reset attempt counter on success
+  - Clear indication in live feed when retrying
+
+### Issue EC3-005: No Failure Screenshots or Reasoning (P1 - FIXED)
+- **Component:** TestAgent Error Handling
+- **Description:** When phases fail, no screenshot captured and no AI reasoning provided for why the failure occurred
+- **Impact:** Difficult to debug issues without visual evidence of failure state
+- **Fix:** Added `captureFailureScreenshot()` method with AI failure analysis
+- **Implementation:**
+  - Capture screenshot when any phase fails
+  - Use OpenAI vision model to analyze failure screenshot
+  - Provide AI reasoning about why the phase failed
+  - Store failure screenshot in R2 with failure metadata
+  - Broadcast failure reasoning to live feed
+  - Log failure analysis to test_events
+
+### Issue EC3-006: Duplicate Messages in Live Feed (P2 - FIXED)
+- **Component:** TestAgent WebSocket Broadcasting
+- **Description:** Too many similar/duplicate messages in live feed (e.g., "Test complete!" message appeared twice)
+- **Impact:** Cluttered live feed, harder to follow test progress
+- **Fix:** Added message deduplication in `broadcastToClients()`
+- **Implementation:**
+  - Track last broadcast message content
+  - Skip sending exact duplicate messages within 5-second window
+  - Reduces noise while maintaining important updates
 
 ---
 

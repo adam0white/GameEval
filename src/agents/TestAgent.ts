@@ -33,6 +33,7 @@ export class TestAgent implements DurableObject {
   // WebSocket clients for real-time progress updates (not persisted)
   private websocketClients: WebSocket[] = [];
   private lastBroadcast: number = 0;
+  private lastBroadcastMessage: string = '';
   
   // Agent SQL initialized flag
   private sqlInitialized: boolean = false;
@@ -284,8 +285,14 @@ export class TestAgent implements DurableObject {
       const phase1Promise = this.executePhase1Logic(result);
       await Promise.race([phase1Promise, timeoutPromise]);
 
+      // Reset attempt counter on success
+      await this.state.storage.put('phase1_attempts', 0);
+
       return Response.json(result);
     } catch (error) {
+      // Capture failure screenshot with AI reasoning
+      await this.captureFailureScreenshot(Phase.PHASE1, error);
+      
       // Translate errors to user-friendly messages (Story 2.7)
       const errorObj = error instanceof Error ? error : new Error('Unknown error');
       const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE1);
@@ -315,14 +322,19 @@ export class TestAgent implements DurableObject {
    * Execute Phase 1 logic steps
    */
   private async executePhase1Logic(result: Phase1Result): Promise<void> {
-    // Task 1: Log phase start to test_events
-    await this.updateStatus(Phase.PHASE1, 'Phase 1 started');
+    // Track retry attempts for clearer messaging
+    const attemptCount = (await this.state.storage.get<number>('phase1_attempts') || 0) + 1;
+    await this.state.storage.put('phase1_attempts', attemptCount);
+    
+    // Task 1: Log phase start to test_events with attempt number
+    const attemptMessage = attemptCount > 1 ? ` (Retry attempt ${attemptCount}/3)` : '';
+    await this.updateStatus(Phase.PHASE1, `Phase 1 started${attemptMessage}`);
     await insertTestEvent(
       this.env.DB,
       this.testRunId,
       Phase.PHASE1,
       'started',
-      'Phase 1: Load & Validation started'
+      `Phase 1: Load & Validation started${attemptMessage}`
     );
 
     // Task 2: Launch browser session (AC #2)
@@ -366,6 +378,7 @@ export class TestAgent implements DurableObject {
     // Task 5: Capture initial screenshot (AC #5)
     try {
       await this.captureScreenshot('phase1-initial-load', Phase.PHASE1);
+      await this.updateStatus(Phase.PHASE1, 'Initial screenshot captured');
     } catch (error) {
       // Screenshot failure is non-fatal
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -379,22 +392,61 @@ export class TestAgent implements DurableObject {
       return; // Early return on blank page
     }
 
-    // Task 8: Detect if game requires user interaction to start (AC #8)
-    // Check for play/start/begin buttons using Puppeteer's $$ selector
-    const playButtons = await page.$$('button');
+    // Task 8: Detect and click "Run game" / "Play" / "Start" buttons
+    // This ensures we actually start the game before Phase 2
+    await this.updateStatus(Phase.PHASE1, 'Checking for game start buttons...');
     let requiresInteraction = false;
+    let gameStarted = false;
     
-    for (const button of playButtons) {
-      try {
-        const text = await page.evaluate((el: any) => el.textContent?.toLowerCase() || '', button);
-        if (text.includes('play') || text.includes('start') || text.includes('begin')) {
-          requiresInteraction = true;
-          break;
+    try {
+      // Try to find and click start button using Stagehand's act() method
+      // This uses AI to intelligently find and click the right button
+      await this.updateStatus(Phase.PHASE1, 'Looking for Run/Play/Start button...');
+      const actResult = await page.act({
+        action: 'Click the button to run, play, or start the game',
+      });
+      
+      if (actResult) {
+        requiresInteraction = true;
+        gameStarted = true;
+        await this.updateStatus(Phase.PHASE1, 'Game start button clicked successfully');
+        await insertTestEvent(
+          this.env.DB,
+          this.testRunId,
+          Phase.PHASE1,
+          'interaction',
+          'Clicked game start button (Run/Play/Start)'
+        );
+        
+        // Wait for game to load after clicking
+        await page.waitForTimeout(3000);
+        
+        // Capture screenshot after game starts
+        try {
+          await this.captureScreenshot('phase1-game-started', Phase.PHASE1);
+          await this.updateStatus(Phase.PHASE1, 'Game started - screenshot captured');
+        } catch (error) {
+          // Non-fatal
+          await insertTestEvent(
+            this.env.DB,
+            this.testRunId,
+            Phase.PHASE1,
+            'warning',
+            `Failed to capture post-start screenshot: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
         }
-      } catch (e) {
-        // Skip buttons that can't be evaluated
-        continue;
       }
+    } catch (startError) {
+      // If no start button found or click failed, that's okay - game may not need it
+      const message = startError instanceof Error ? startError.message : 'Unknown error';
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        Phase.PHASE1,
+        'info',
+        `No start button needed or found: ${message}`
+      );
+      requiresInteraction = false;
     }
     
     result.requiresInteraction = requiresInteraction;
@@ -404,7 +456,7 @@ export class TestAgent implements DurableObject {
       this.testRunId,
       Phase.PHASE1,
       'interaction_detection',
-      `Game requires interaction: ${result.requiresInteraction}`
+      `Game requires interaction: ${result.requiresInteraction}, Game started: ${gameStarted}`
     );
 
     // Task 9: Log immediate console errors (AC #9)
@@ -483,8 +535,14 @@ export class TestAgent implements DurableObject {
       const phase2Promise = this.executePhase2Logic(result);
       await Promise.race([phase2Promise, timeoutPromise]);
 
+      // Reset attempt counter on success
+      await this.state.storage.put('phase2_attempts', 0);
+
       return Response.json(result);
     } catch (error) {
+      // Capture failure screenshot with AI reasoning
+      await this.captureFailureScreenshot(Phase.PHASE2, error);
+      
       // Translate errors to user-friendly messages (Story 2.7)
       const errorObj = error instanceof Error ? error : new Error('Unknown error');
       const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE2);
@@ -515,14 +573,19 @@ export class TestAgent implements DurableObject {
    * Execute Phase 2 logic steps
    */
   private async executePhase2Logic(result: Phase2Result): Promise<void> {
-    // Task 1: Log phase start to test_events
-    await this.updateStatus(Phase.PHASE2, 'Phase 2 started');
+    // Track retry attempts for clearer messaging
+    const attemptCount = (await this.state.storage.get<number>('phase2_attempts') || 0) + 1;
+    await this.state.storage.put('phase2_attempts', attemptCount);
+    
+    // Task 1: Log phase start to test_events with attempt number
+    const attemptMessage = attemptCount > 1 ? ` (Retry attempt ${attemptCount}/3)` : '';
+    await this.updateStatus(Phase.PHASE2, `Phase 2 started${attemptMessage}`);
     await insertTestEvent(
       this.env.DB,
       this.testRunId,
       Phase.PHASE2,
       'started',
-      'Phase 2: Control Discovery started'
+      `Phase 2: Control Discovery started${attemptMessage}`
     );
 
     // Task 2: Verify Stagehand instance exists (reuse from Phase 1)
@@ -834,8 +897,14 @@ export class TestAgent implements DurableObject {
       // Execute Phase 3 logic with adaptive timeout
       await this.executePhase3Logic(result, minTimeoutMs, maxTimeoutMs);
 
+      // Reset attempt counter on success
+      await this.state.storage.put('phase3_attempts', 0);
+
       return Response.json(result);
     } catch (error) {
+      // Capture failure screenshot with AI reasoning
+      await this.captureFailureScreenshot(Phase.PHASE3, error);
+      
       // Translate errors to user-friendly messages (Story 2.7)
       const errorObj = error instanceof Error ? error : new Error('Unknown error');
       const userFriendlyMessage = this.translateError(errorObj, Phase.PHASE3);
@@ -865,14 +934,19 @@ export class TestAgent implements DurableObject {
    * Execute Phase 3 logic with goal-driven autonomous gameplay
    */
   private async executePhase3Logic(result: Phase3Result, minTimeout: number, maxTimeout: number): Promise<void> {
-    // Task 1: Log phase start to test_events
-    await this.updateStatus(Phase.PHASE3, 'Phase 3 started');
+    // Track retry attempts for clearer messaging
+    const attemptCount = (await this.state.storage.get<number>('phase3_attempts') || 0) + 1;
+    await this.state.storage.put('phase3_attempts', attemptCount);
+    
+    // Task 1: Log phase start to test_events with attempt number
+    const attemptMessage = attemptCount > 1 ? ` (Retry attempt ${attemptCount}/3)` : '';
+    await this.updateStatus(Phase.PHASE3, `Phase 3 started${attemptMessage}`);
     await insertTestEvent(
       this.env.DB,
       this.testRunId,
       Phase.PHASE3,
       'started',
-      'Phase 3: Gameplay Exploration started'
+      `Phase 3: Gameplay Exploration started${attemptMessage}`
     );
 
     // Task 2: Verify Stagehand instance exists and initialize agent with Computer Use mode
@@ -1997,6 +2071,13 @@ Return ONLY valid JSON in this exact format:
   private broadcastToClients(message: Record<string, unknown>): void {
     const messageStr = JSON.stringify(message);
     
+    // Deduplicate messages: Don't send the exact same message twice in a row within 5 seconds
+    if (messageStr === this.lastBroadcastMessage && Date.now() - this.lastBroadcast < 5000) {
+      return; // Skip duplicate
+    }
+    
+    this.lastBroadcastMessage = messageStr;
+    
     this.websocketClients.forEach(client => {
       try {
         client.send(messageStr);
@@ -2025,24 +2106,31 @@ Return ONLY valid JSON in this exact format:
         return this.stagehand;
       }
 
-      // Initialize Stagehand with Workers AI routed through AI Gateway
+      // Initialize Stagehand with OpenRouter (direct access, bypassing AI Gateway)
       // Following: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
-      // All AI requests route through AI Gateway for observability, caching, and cost tracking
-      const llmClient = new WorkersAIClient(this.env.AI, {
-        gateway: {
-          id: 'ai-gateway-gameeval'
-        }
-      });
-
+      // Flow: Stagehand → OpenRouter → OpenAI
+      // Note: AI Gateway integration with Stagehand not currently supported
+      
+      if (!this.env.OPENROUTER_API_KEY) {
+        throw new Error(
+          'OpenRouter API key is missing. Set OPENROUTER_API_KEY in .dev.vars (local) or wrangler secret (production)'
+        );
+      }
+      
       this.stagehand = new Stagehand({
         env: 'LOCAL',
         localBrowserLaunchOptions: {
           cdpUrl: endpointURLString(this.env.BROWSER),
         },
-        llmClient,
+        // Use gpt-5-mini through OpenRouter (openai/gpt-5-mini format per OpenRouter docs)
+        modelName: 'openai/gpt-5-mini',
+        modelClientOptions: {
+          apiKey: this.env.OPENROUTER_API_KEY,
+          baseURL: 'https://openrouter.ai/api/v1',
+        },
         verbose: 1,
-        domSettleTimeoutMs: 3000, // Reduced from 5s to 3s for faster interactions
-        enableCaching: false, // Disable caching for more reliable test runs
+        domSettleTimeoutMs: 3000,
+        enableCaching: false,
       });
 
       // Initialize Stagehand
@@ -2170,6 +2258,87 @@ Return ONLY valid JSON in this exact format:
       );
       
       throw new Error(`Failed to capture screenshot: ${message}`);
+    }
+  }
+
+  /**
+   * Capture failure screenshot with AI reasoning
+   * When a phase fails, this captures the current page state and uses AI to explain why
+   */
+  private async captureFailureScreenshot(phase: Phase, error: unknown): Promise<void> {
+    try {
+      // Only capture if browser is still available
+      if (!this.stagehand || !this.stagehand.page) {
+        await this.updateStatus(phase, `Phase failed: ${error instanceof Error ? error.message : 'Unknown error'} (No screenshot available - browser closed)`);
+        return;
+      }
+
+      // Capture failure screenshot
+      const screenshotDescription = `${phase}-failure`;
+      await this.updateStatus(phase, `Capturing failure screenshot...`);
+      
+      const screenshotBuffer = await this.stagehand.page.screenshot({
+        fullPage: false,
+      });
+
+      // Convert Buffer to ArrayBuffer
+      const arrayBuffer = screenshotBuffer.buffer.slice(
+        screenshotBuffer.byteOffset,
+        screenshotBuffer.byteOffset + screenshotBuffer.byteLength
+      ) as ArrayBuffer;
+
+      // Save screenshot to R2
+      const url = await this.storeEvidence('screenshot', arrayBuffer, {
+        action: screenshotDescription,
+        phase,
+      });
+
+      // Use AI to analyze why the phase failed
+      await this.updateStatus(phase, `Analyzing failure with AI...`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      const prompt = `Analyze this screenshot of a game test that just failed during ${phase}.
+
+Error: ${errorMessage}
+
+Based on what you see in the screenshot, explain in 1-2 sentences why you think this phase failed. Consider:
+- Is the page loaded correctly?
+- Are there any error messages visible?
+- Does the UI appear broken or unresponsive?
+- Is there anything blocking the test agent?
+
+Provide a brief, user-friendly explanation.`;
+
+      const aiResult = await callAI(
+        this.env,
+        prompt,
+        [arrayBuffer],
+        'primary',
+        this.testRunId,
+        { phase, purpose: 'failure_analysis' }
+      );
+
+      let reasoning = 'Unable to determine cause from screenshot';
+      if (aiResult.success && aiResult.data.text) {
+        reasoning = aiResult.data.text.trim();
+      }
+
+      // Broadcast failure with reasoning
+      await this.updateStatus(phase, `Phase failed: ${errorMessage}. AI analysis: ${reasoning}`);
+      
+      // Log to test events
+      await insertTestEvent(
+        this.env.DB,
+        this.testRunId,
+        phase,
+        'failure_analysis',
+        `Failure screenshot captured. AI reasoning: ${reasoning}`,
+        JSON.stringify({ error: errorMessage, screenshot: url, reasoning })
+      );
+    } catch (captureError) {
+      // If we can't capture failure screenshot, just log the original error
+      const message = captureError instanceof Error ? captureError.message : 'Unknown error';
+      await this.updateStatus(phase, `Phase failed: ${error instanceof Error ? error.message : 'Unknown error'} (Failed to capture screenshot: ${message})`);
     }
   }
 
