@@ -4,8 +4,8 @@
  * Story 3.1: Dashboard Worker with URL Submission
  */
 
-// Export the TestAgent Durable Object for Cloudflare Workers runtime
-export { TestAgent } from './agents/TestAgent';
+// Export TestAgentV2 Durable Object with SQLite support
+export { TestAgentV2 } from './agents/TestAgent';
 
 // Export the GameTestPipeline Workflow for Cloudflare Workers runtime
 export { GameTestPipeline } from './workflows/GameTestPipeline';

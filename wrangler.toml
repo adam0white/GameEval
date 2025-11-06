@@ -53,11 +53,22 @@ class_name = "GameTestPipeline"
 # Durable Objects binding
 [[durable_objects.bindings]]
 name = "TEST_AGENT"
-class_name = "TestAgent"
+class_name = "TestAgentV2"
 script_name = "gameeval-qa-pipeline"
 
 # Durable Objects migrations
+# v1: Original migration as deployed to production (non-SQLite)
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["TestAgent"]
+new_classes = ["TestAgent"]
+
+# v2: Create TestAgentV2 with SQLite support (TestAgent remains for backward compatibility)
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["TestAgentV2"]
+
+# v3: Delete orphaned TestAgent class now that binding points to TestAgentV2
+[[migrations]]
+tag = "v3"
+deleted_classes = ["TestAgent"]
 

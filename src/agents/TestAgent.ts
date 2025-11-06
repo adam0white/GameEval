@@ -106,11 +106,11 @@ class ScreenshotManager {
   }
 }
 
-export class TestAgent implements DurableObject {
+export class TestAgentV2 implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   
-  // TestAgent instance properties (restored from DO storage on each fetch)
+  // TestAgentV2 instance properties (restored from DO storage on each fetch)
   private testRunId: string = '';
   private gameUrl: string = '';
   private inputSchema?: string;
@@ -2841,6 +2841,6 @@ Provide a brief, user-friendly explanation.`;
   }
 }
 
-// Export TestAgent as default for Durable Object binding
-export default TestAgent;
+// Export TestAgentV2 as default for Durable Object binding
+export default TestAgentV2;
 
