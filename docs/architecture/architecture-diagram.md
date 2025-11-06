@@ -43,10 +43,10 @@ graph TB
     
     %% Workflow Orchestration
     Workflow -->|3. Create Agent| TestAgentDO
-    Workflow -->|4. runPhase1()| TestAgentDO
-    Workflow -->|5. runPhase2()| TestAgentDO
-    Workflow -->|6. runPhase3()| TestAgentDO
-    Workflow -->|7. runPhase4()| TestAgentDO
+    Workflow -->|4. Run Phase 1| TestAgentDO
+    Workflow -->|5. Run Phase 2| TestAgentDO
+    Workflow -->|6. Run Phase 3| TestAgentDO
+    Workflow -->|7. Run Phase 4| TestAgentDO
     
     %% TestAgent Dependencies
     TestAgentDO -->|Launch Browser| BrowserRendering
@@ -170,7 +170,7 @@ graph LR
     Workflow["⚙️ Workflow<br/>(Orchestrator)"]
     Browser["🌐 Dashboard<br/>(Real-time UI)"]
     
-    Workflow -->|"RPC: fetch('/phase1')"| Methods
+    Workflow -->|"RPC: fetch phase1"| Methods
     Browser -.->|WebSocket: Live Updates| Methods
     
     Methods -->|Save Decisions| AgentDB
@@ -304,9 +304,9 @@ graph LR
     WF["⚙️ Workflow"]
     TA["🤖 TestAgent DO"]
     
-    DW -->|"env.WORKFLOW.create().run()"| WF
-    WF -->|"env.TEST_AGENT.get(id).fetch()"| TA
-    DW -->|"env.TEST_AGENT.get(id).fetch()"| TA
+    DW -->|"env.WORKFLOW.create run"| WF
+    WF -->|"env.TEST_AGENT.get fetch"| TA
+    DW -->|"env.TEST_AGENT.get fetch"| TA
     
     style DW fill:#fff4e1
     style WF fill:#f0e1ff

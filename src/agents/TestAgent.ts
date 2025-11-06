@@ -15,7 +15,7 @@ import { WorkersAIClient } from '../shared/helpers/workersAIClient';
 import { insertTestEvent, insertEvaluationScore, updateTestStatus } from '../shared/helpers/d1';
 import { uploadScreenshot, uploadLog, getTestArtifacts, getPublicUrl } from '../shared/helpers/r2';
 import { callAI } from '../shared/helpers/ai-gateway';
-import { Phase, LogType, ERROR_MESSAGES, ERROR_PATTERNS } from '../shared/constants';
+import { Phase, LogType, EventType, ERROR_MESSAGES, ERROR_PATTERNS } from '../shared/constants';
 import type { TestAgentState, EvidenceMetadata, ConsoleLogEntry, NetworkError, Phase1Result, Phase2Result, Phase3Result, Phase4Result, MetricScore, ControlMap } from '../shared/types';
 
 /**
@@ -2526,35 +2526,120 @@ Examine the visual progression across screenshots. Look for:
         return this.stagehand;
       }
 
-      // Initialize Stagehand with OpenRouter (direct access, bypassing AI Gateway)
+      // Initialize Stagehand with fallback mechanism
       // Following: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
-      // Flow: Stagehand → OpenRouter → OpenAI
-      // Note: AI Gateway integration with Stagehand not currently supported
+      // Flow: Try OpenRouter first (GPT-5-mini) → Fall back to Workers AI if OpenRouter unavailable
       
-      if (!this.env.OPENROUTER_API_KEY) {
-        throw new Error(
-          'OpenRouter API key is missing. Set OPENROUTER_API_KEY in .dev.vars (local) or wrangler secret (production)'
-        );
+      let stagehandConfig: any;
+      let usingFallback = false;
+      
+      if (this.env.OPENROUTER_API_KEY) {
+        // Primary: Use gpt-5-mini through OpenRouter with optimized settings
+        stagehandConfig = {
+          env: 'LOCAL',
+          localBrowserLaunchOptions: {
+            cdpUrl: endpointURLString(this.env.BROWSER),
+          },
+          modelName: 'openai/gpt-5-mini',
+          modelClientOptions: {
+            apiKey: this.env.OPENROUTER_API_KEY,
+            baseURL: 'https://openrouter.ai/api/v1',
+          },
+          verbose: 1,
+          domSettleTimeoutMs: 2000,
+          enableCaching: false,
+        };
+      } else {
+        // Fallback: Use Workers AI through AI Gateway (free, local)
+        const { WorkersAIClient } = await import('../shared/helpers/workersAIClient');
+        const llmClient = new WorkersAIClient(this.env.AI, {
+          gateway: {
+            id: 'ai-gateway-gameeval'
+          }
+        });
+        
+        stagehandConfig = {
+          env: 'LOCAL',
+          localBrowserLaunchOptions: {
+            cdpUrl: endpointURLString(this.env.BROWSER),
+          },
+          llmClient,
+          verbose: 1,
+          domSettleTimeoutMs: 2000,
+          enableCaching: false,
+        };
+        usingFallback = true;
       }
       
-      this.stagehand = new Stagehand({
-        env: 'LOCAL',
-        localBrowserLaunchOptions: {
-          cdpUrl: endpointURLString(this.env.BROWSER),
-        },
-        // Use gpt-5-mini through OpenRouter with optimized settings
-        modelName: 'openai/gpt-5-mini',
-        modelClientOptions: {
-          apiKey: this.env.OPENROUTER_API_KEY,
-          baseURL: 'https://openrouter.ai/api/v1',
-        },
-        verbose: 1,
-        domSettleTimeoutMs: 2000, // Reduced for faster response
-        enableCaching: false, // Disable for fresh decisions each time
-      });
-
-      // Initialize Stagehand
-      await this.stagehand.init();
+      try {
+        this.stagehand = new Stagehand(stagehandConfig);
+        
+        // Initialize Stagehand
+        await this.stagehand.init();
+        
+        // Log which provider is being used
+        if (this.testRunId) {
+          const provider = usingFallback ? 'Workers AI (fallback)' : 'OpenRouter (primary)';
+          await insertTestEvent(
+            this.env.DB,
+            this.testRunId,
+            'agent',
+            EventType.PROGRESS,
+            `Stagehand initialized with ${provider}`,
+            JSON.stringify({ provider: usingFallback ? 'workers-ai' : 'openrouter' })
+          );
+        }
+      } catch (primaryError) {
+        // If OpenRouter fails at runtime, fall back to Workers AI
+        if (!usingFallback) {
+          if (this.testRunId) {
+            await insertTestEvent(
+              this.env.DB,
+              this.testRunId,
+              'agent',
+              EventType.PROGRESS,
+              `OpenRouter connection failed: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}. Falling back to Workers AI.`,
+              JSON.stringify({ provider: 'openrouter', error: String(primaryError) })
+            );
+          }
+          
+          // Fallback: Use Workers AI through AI Gateway
+          const { WorkersAIClient } = await import('../shared/helpers/workersAIClient');
+          const llmClient = new WorkersAIClient(this.env.AI, {
+            gateway: {
+              id: 'ai-gateway-gameeval'
+            }
+          });
+          
+          stagehandConfig = {
+            env: 'LOCAL',
+            localBrowserLaunchOptions: {
+              cdpUrl: endpointURLString(this.env.BROWSER),
+            },
+            llmClient,
+            verbose: 1,
+            domSettleTimeoutMs: 2000,
+            enableCaching: false,
+          };
+          
+          this.stagehand = new Stagehand(stagehandConfig);
+          await this.stagehand.init();
+          
+          if (this.testRunId) {
+            await insertTestEvent(
+              this.env.DB,
+              this.testRunId,
+              'agent',
+              EventType.PROGRESS,
+              'Stagehand initialized with Workers AI (fallback)',
+              JSON.stringify({ provider: 'workers-ai', fallback_reason: 'openrouter_failure' })
+            );
+          }
+        } else {
+          // Already using fallback, can't fall back further
+          throw primaryError;
+        }
+      }
 
       // Configure Playwright with aggressive timeouts for faster fallback
       // When elements are blocked by overlays, fail fast and retry with force click

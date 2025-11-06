@@ -131,7 +131,7 @@ export interface TokenUsage {
  */
 export interface AIMetadata {
   model: string;
-  provider: 'workers-ai' | 'openai' | 'anthropic';
+  provider: 'workers-ai' | 'openai' | 'anthropic' | 'openrouter';
   cached?: boolean;
   cost?: number;
   tokens?: TokenUsage;
@@ -147,7 +147,7 @@ export interface AIMetadata {
 export interface AIResponse {
   text: string;
   model: string;
-  provider: 'workers-ai' | 'openai' | 'anthropic';
+  provider: 'workers-ai' | 'openai' | 'anthropic' | 'openrouter';
   cost?: number;
   cached?: boolean;
   tokens?: TokenUsage;

@@ -8,12 +8,13 @@ This guide explains how to use the AI Gateway helper functions in the GameEval Q
 
 ## Overview
 
-All AI requests in this project route through Cloudflare AI Gateway (`ai-gateway-gameeval`) with:
+All AI requests in this project use a multi-tier fallback strategy:
 
-- **Primary Provider**: Workers AI (via `env.AI` binding) - Free, fast, no API keys
-- **Fallback Provider**: OpenAI GPT-4o (via authenticated AI Gateway) - Automatic failover
+- **Primary Provider**: OpenRouter (GPT-5-mini via `env.OPENROUTER_API_KEY`) - Fast, capable, cost-effective
+- **Secondary Provider**: Workers AI (via `env.AI` binding through AI Gateway) - Free, reliable, no API keys
+- **Final Fallback**: OpenAI GPT-4o (via authenticated AI Gateway) - Most capable, automatic failover
 - **Observability**: Cost tracking, caching detection, full request logging
-- **Automatic Failover**: Rate limits, timeouts, errors trigger fallback
+- **Automatic Failover**: Connection failures, rate limits, timeouts, errors trigger cascading fallback
 
 ---
 
@@ -88,11 +89,13 @@ All AI requests flow through AI Gateway for observability:
 
 **TestAgent (Stagehand):**
 ```
-Stagehand observe/act calls
+Stagehand initialization
   ↓
-WorkersAIClient with gateway config
+Try OpenRouter (if API key available)
   ↓
-Workers AI via AI Gateway (ai-gateway-gameeval)
+Success? → Use OpenRouter for observe/act calls
+  ↓
+Failure? → Fall back to WorkersAIClient with AI Gateway
   ↓
 Return response
 ```
@@ -101,31 +104,46 @@ Return response
 ```
 callAI() 
   ↓
-Try Workers AI (primary) via AI Gateway
+Try OpenRouter (if API key available and text-only)
   ↓
 Success? → Return response
   ↓
-Failure? → Try OpenAI via AI Gateway (fallback)
+Failure or vision request? → Try Workers AI via AI Gateway
+  ↓
+Success? → Return response
+  ↓
+Failure? → Try OpenAI via AI Gateway (final fallback)
   ↓
 Return response or error
 ```
 
 ### Provider Details
 
-**Workers AI (Primary)**
+**OpenRouter (Primary)**
+- Model: `openai/gpt-5-mini`
+- Cost: ~$0.15/1M input tokens, ~$0.60/1M output tokens
+- Timeout: 30 seconds
+- Requires: `OPENROUTER_API_KEY` in environment/secrets
+- Use case: Fast, capable, cost-effective for text requests
+- Limitations: Text-only (no vision support)
+
+**Workers AI (Secondary)**
 - Models: 
   - Text: `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
   - Vision: `@cf/meta/llama-3.2-11b-vision-instruct`
 - Cost: Free ($0.00)
 - Timeout: 30 seconds
 - No API keys required (uses `env.AI` binding)
+- Routes through AI Gateway (`ai-gateway-gameeval`) for observability
+- Use case: Cost-free fallback, vision requests
 
-**OpenAI (Fallback)**
+**OpenAI (Final Fallback)**
 - Model: `gpt-4o`
 - Cost: ~$2.50/1M input tokens, ~$10/1M output tokens
 - Timeout: 45 seconds
 - Authenticated via AI Gateway (`ai-gateway-gameeval`)
 - Gateway handles caching (15-minute TTL)
+- Use case: Most capable, guaranteed availability
 
 ---
 
@@ -209,20 +227,44 @@ if (result.success && result.data.cached) {
 
 Automatic failover triggers on:
 
-1. **Rate Limits** (429 error)
-2. **Timeouts** (>30s for primary, >45s for fallback)
-3. **Server Errors** (500, 503)
+1. **Connection Failures** (network errors, API unavailable)
+2. **Rate Limits** (429 error)
+3. **Timeouts** (>30s for primary/secondary, >45s for final fallback)
+4. **Server Errors** (500, 503)
+5. **Missing API Keys** (graceful degradation)
 
 Example flow:
 
 ```
-callAI() with Workers AI
+callAI() with OpenRouter
+  ↓
+OpenRouter: Connection timeout
+  ↓
+Log: "OpenRouter failed: timeout. Trying Workers AI fallback."
+  ↓
+Workers AI via AI Gateway
   ↓
 Workers AI: 429 Too Many Requests
   ↓
 Log: "Workers AI failed: rate limit. Trying OpenAI fallback."
   ↓
 OpenAI via AI Gateway
+  ↓
+Success!
+```
+
+**Stagehand Initialization Fallback:**
+
+```
+Stagehand initialization with OpenRouter
+  ↓
+OpenRouter: Connection failed (missing API key or network error)
+  ↓
+Log: "OpenRouter connection failed. Falling back to Workers AI."
+  ↓
+Stagehand re-initialized with WorkersAIClient
+  ↓
+All observe/act calls now use Workers AI
   ↓
 Success!
 ```
@@ -322,36 +364,75 @@ Common errors:
 
 ## Stagehand Integration
 
-Stagehand (used in TestAgent for browser automation) routes all AI requests through AI Gateway:
+Stagehand (used in TestAgent for browser automation) uses a multi-tier fallback strategy:
 
 ```typescript
-// In TestAgent.ts
-const llmClient = new WorkersAIClient(this.env.AI, {
-  gateway: {
-    id: 'ai-gateway-gameeval'
-  }
-});
-
-const stagehand = new Stagehand({
-  env: 'LOCAL',
-  localBrowserLaunchOptions: { cdpUrl: endpointURLString(this.env.BROWSER) },
-  llmClient,
-  // ... other options
-});
+// In TestAgent.ts - Primary: OpenRouter (if available)
+if (this.env.OPENROUTER_API_KEY) {
+  const stagehand = new Stagehand({
+    env: 'LOCAL',
+    localBrowserLaunchOptions: { cdpUrl: endpointURLString(this.env.BROWSER) },
+    modelName: 'openai/gpt-5-mini',
+    modelClientOptions: {
+      apiKey: this.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+    },
+    // ... other options
+  });
+}
+// Fallback: Workers AI through AI Gateway
+else {
+  const llmClient = new WorkersAIClient(this.env.AI, {
+    gateway: {
+      id: 'ai-gateway-gameeval'
+    }
+  });
+  
+  const stagehand = new Stagehand({
+    env: 'LOCAL',
+    localBrowserLaunchOptions: { cdpUrl: endpointURLString(this.env.BROWSER) },
+    llmClient,
+    // ... other options
+  });
+}
 ```
 
-All `observe()` and `act()` calls made by Stagehand now route through AI Gateway, providing:
+**Runtime Fallback:**
+If OpenRouter initialization or connection fails at runtime, Stagehand automatically re-initializes with Workers AI through AI Gateway, ensuring continuous operation.
+
+All `observe()` and `act()` calls made by Stagehand provide:
 - Full observability of Stagehand's AI usage
-- Request caching for repeated patterns
+- Automatic failover on connection failures
 - Cost tracking for browser automation AI calls
 - Unified monitoring across all AI providers
 
 Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehand/
 
+## Configuration Variables
+
+The AI fallback system requires the following environment variables:
+
+**Required (minimum configuration):**
+- `AI` binding - Workers AI for free, local inference
+- `DB` binding - D1 database for logging
+
+**Optional (enhanced capability):**
+- `OPENROUTER_API_KEY` - Enables primary OpenRouter provider (GPT-5-mini)
+  - Local dev: Add to `.dev.vars`
+  - Production: Set via `wrangler secret put OPENROUTER_API_KEY`
+
+**For final fallback:**
+- OpenAI API key configured in AI Gateway dashboard (automatic, no code changes needed)
+
+**Graceful Degradation:**
+The system works with any combination of these variables. If OpenRouter is unavailable, it falls back to Workers AI. If Workers AI fails, it falls back to OpenAI. The system always provides the best available service.
+
+---
+
 ## Future Enhancements
 
-- Add Anthropic Claude 3.5 Sonnet fallback
-- Implement dynamic routing for advanced use cases
+- Add Anthropic Claude 3.5 Sonnet as additional fallback tier
+- Implement dynamic routing based on request complexity
 - Add streaming support for long-running requests
 - Implement request retry logic with exponential backoff
 - Add cost budgets per user/test run with automatic cutoff
@@ -360,33 +441,57 @@ Reference: https://developers.cloudflare.com/browser-rendering/platform/stagehan
 
 ## Complete AI Gateway Integration Status
 
-All AI calls in the system now route through AI Gateway (`ai-gateway-gameeval`):
+All AI calls in the system use a multi-tier fallback strategy:
 
-### ✅ Workers AI Calls (Primary Provider)
+### ✅ OpenRouter Calls (Primary Provider)
 
-1. **Stagehand Browser Automation** (`WorkersAIClient`)
+1. **Stagehand Browser Automation** (Primary)
+   - Location: `src/agents/TestAgent.ts`
+   - Model: `openai/gpt-5-mini` via OpenRouter API
+   - Used by: TestAgent phases (observe/act calls)
+   - Fallback: Runtime detection of connection failures triggers Workers AI fallback
+   
+2. **Direct AI Helper** (`callAI()` → `callOpenRouter()`)
+   - Location: `src/shared/helpers/ai-gateway.ts`
+   - Model: `openai/gpt-5-mini` via OpenRouter API
+   - Used by: Phase 4 evaluation, any direct text-only AI requests
+   - Fallback: Automatic fallback to Workers AI on failure
+
+### ✅ Workers AI Calls (Secondary Provider)
+
+3. **Stagehand Browser Automation** (`WorkersAIClient` - Fallback)
    - Location: `src/shared/helpers/workersAIClient.ts`
    - Routes through: Gateway config passed to `this.binding.run()`
-   - Used by: TestAgent phases (observe/act calls)
+   - Used by: TestAgent phases when OpenRouter unavailable
    
-2. **Direct AI Helper** (`callAI()` → `callWorkersAI()`)
+4. **Direct AI Helper** (`callAI()` → `callWorkersAI()`)
    - Location: `src/shared/helpers/ai-gateway.ts`
    - Routes through: Gateway config passed to `env.AI.run()`
-   - Used by: Phase 4 evaluation, any direct AI requests
+   - Used by: Vision requests, OpenRouter fallback, Phase 4 evaluation
 
-### ✅ OpenAI Calls (Fallback Provider)
+### ✅ OpenAI Calls (Final Fallback Provider)
 
-3. **OpenAI Fallback** (`callAIGatewayOpenAI()`)
+5. **OpenAI Final Fallback** (`callAIGatewayOpenAI()`)
    - Location: `src/shared/helpers/ai-gateway.ts`
    - Routes through: `https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/openai/...`
-   - Used by: Automatic fallback when Workers AI fails
+   - Used by: Automatic final fallback when Workers AI fails
 
 ### Gateway Configuration
 
 **Gateway Name**: `ai-gateway-gameeval`  
 **Account ID**: `a20259cba74e506296745f9c67c1f3bc`
 
-All requests include gateway metadata in logs for tracking:
+All requests include provider metadata in logs for tracking:
+```json
+{
+  "provider": "openrouter",
+  "model": "openai/gpt-5-mini",
+  "latency_ms": 854,
+  "cost": 0.00012
+}
+```
+
+Or for Workers AI:
 ```json
 {
   "provider": "workers-ai",

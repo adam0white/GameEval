@@ -23,6 +23,7 @@ const AI_GATEWAY_CONFIG = {
   WORKERS_AI_VISION_MODEL: '@cf/meta/llama-3.2-11b-vision-instruct',
   WORKERS_AI_TEXT_MODEL: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   OPENAI_MODEL: 'gpt-4o',
+  OPENROUTER_MODEL: 'openai/gpt-5-mini',
   // Timeouts
   PRIMARY_TIMEOUT_MS: 30000,
   FALLBACK_TIMEOUT_MS: 45000,
@@ -32,10 +33,11 @@ const AI_GATEWAY_CONFIG = {
  * Call AI model with automatic routing and fallback
  * 
  * Flow:
- * 1. Try Workers AI (primary) via env.AI binding
- * 2. On failure (rate limit, timeout, error), route to AI Gateway (OpenAI fallback)
- * 3. Log all requests to test_events with metadata
- * 4. Return standardized AIResponse with cost and performance data
+ * 1. Try OpenRouter (if API key available and text-only) → fastest, most capable
+ * 2. On failure or vision request, try Workers AI (via env.AI binding) → free, reliable
+ * 3. On failure, try OpenAI via AI Gateway → final fallback
+ * 4. Log all requests to test_events with metadata
+ * 5. Return standardized AIResponse with cost and performance data
  * 
  * @param env - Cloudflare Worker environment bindings
  * @param prompt - Text prompt for the AI model
@@ -49,6 +51,7 @@ export async function callAI(
   env: {
     AI: Ai;
     DB: D1Database;
+    OPENROUTER_API_KEY?: string;
   },
   prompt: string,
   images?: ArrayBuffer[],
@@ -59,9 +62,42 @@ export async function callAI(
   const startTime = Date.now();
   const hasImages = images && images.length > 0;
   
-  // Try primary provider (Workers AI) first unless fallback is explicitly requested
+  // Try primary provider (OpenRouter if available, otherwise Workers AI) unless fallback is explicitly requested
   if (modelPreference === 'primary') {
-    const primaryResult = await callWorkersAI(
+    // Attempt OpenRouter first if API key is available
+    if (env.OPENROUTER_API_KEY && !hasImages) {
+      const openRouterResult = await callOpenRouter(
+        env,
+        prompt,
+        startTime,
+        testRunId,
+        customMetadata
+      );
+      
+      if (openRouterResult.success) {
+        return openRouterResult;
+      }
+      
+      // OpenRouter failed - log and try Workers AI fallback
+      if (testRunId) {
+        const errorMsg = openRouterResult.error;
+        await insertTestEvent(
+          env.DB,
+          testRunId,
+          'ai',
+          EventType.AI_REQUEST_FAILED,
+          `OpenRouter failed: ${errorMsg}. Trying Workers AI fallback.`,
+          JSON.stringify({
+            provider: 'openrouter',
+            error: errorMsg,
+            ...customMetadata,
+          })
+        );
+      }
+    }
+    
+    // Try Workers AI (either as primary or fallback from OpenRouter)
+    const workersAIResult = await callWorkersAI(
       env,
       prompt,
       images,
@@ -70,13 +106,13 @@ export async function callAI(
       customMetadata
     );
     
-    if (primaryResult.success) {
-      return primaryResult;
+    if (workersAIResult.success) {
+      return workersAIResult;
     }
     
-    // Primary failed - log and try fallback
+    // Workers AI failed - log and try OpenAI fallback
     if (testRunId) {
-      const errorMsg = primaryResult.success ? 'Unknown error' : primaryResult.error;
+      const errorMsg = workersAIResult.error;
       await insertTestEvent(
         env.DB,
         testRunId,
@@ -92,7 +128,7 @@ export async function callAI(
     }
   }
   
-  // Try fallback provider (OpenAI via AI Gateway)
+  // Try final fallback provider (OpenAI via AI Gateway)
   const fallbackResult = await callAIGatewayOpenAI(
     env,
     prompt,
@@ -103,6 +139,137 @@ export async function callAI(
   );
   
   return fallbackResult;
+}
+
+/**
+ * Call OpenRouter (external provider) for text requests
+ * @internal
+ */
+async function callOpenRouter(
+  env: { DB: D1Database; OPENROUTER_API_KEY?: string },
+  prompt: string,
+  startTime: number,
+  testRunId?: string,
+  customMetadata?: Record<string, unknown>
+): Promise<DbResult<AIResponse>> {
+  const model = AI_GATEWAY_CONFIG.OPENROUTER_MODEL;
+  
+  if (!env.OPENROUTER_API_KEY) {
+    return {
+      success: false,
+      error: 'OpenRouter API key not configured',
+    };
+  }
+  
+  try {
+    // Log AI request start
+    if (testRunId) {
+      await insertTestEvent(
+        env.DB,
+        testRunId,
+        'ai',
+        EventType.AI_REQUEST_START,
+        `Calling OpenRouter ${model} (${prompt.length} chars)`,
+        JSON.stringify({
+          provider: 'openrouter',
+          model,
+          prompt_length: prompt.length,
+          ...customMetadata,
+        })
+      );
+    }
+    
+    // Call OpenRouter API
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), AI_GATEWAY_CONFIG.PRIMARY_TIMEOUT_MS);
+    
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://gameeval.dev',
+        'X-Title': 'GameEval QA Pipeline'
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 4096,
+      }),
+      signal: timeoutController.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    }
+    
+    const data = await response.json() as {
+      choices: Array<{ message: { content: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    };
+    
+    const latency = Date.now() - startTime;
+    
+    // Extract token usage
+    const tokens: TokenUsage = {
+      input: data.usage?.prompt_tokens,
+      output: data.usage?.completion_tokens,
+      total: data.usage?.total_tokens,
+    };
+    
+    // Estimate cost for GPT-5-mini (approximate pricing)
+    const inputCost = (tokens.input || 0) * 0.15 / 1_000_000;
+    const outputCost = (tokens.output || 0) * 0.60 / 1_000_000;
+    const totalCost = inputCost + outputCost;
+    
+    const aiResponse: AIResponse = {
+      text: data.choices[0]?.message?.content || '',
+      model,
+      provider: 'openai', // OpenRouter uses OpenAI-compatible format
+      cost: totalCost,
+      cached: false,
+      tokens,
+      metadata: {
+        model,
+        provider: 'openrouter',
+        cost: totalCost,
+        tokens,
+        latency_ms: latency,
+        test_run_id: testRunId,
+        ...customMetadata,
+      },
+    };
+    
+    // Log AI request success
+    if (testRunId) {
+      await insertTestEvent(
+        env.DB,
+        testRunId,
+        'ai',
+        EventType.AI_REQUEST_COMPLETE,
+        `OpenRouter responded (${latency}ms, $${totalCost.toFixed(4)})`,
+        JSON.stringify({
+          provider: 'openrouter',
+          model,
+          latency_ms: latency,
+          cost: totalCost,
+          tokens,
+          ...customMetadata,
+        })
+      );
+    }
+    
+    return { success: true, data: aiResponse };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      error: `OpenRouter request failed: ${errorMessage}`,
+    };
+  }
 }
 
 /**
