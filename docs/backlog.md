@@ -27,3 +27,6 @@ Routing guidance:
 Adam's human notes:
 - We can deploy our own small games and test them with the system.
 - Find a way to kill the DO once the test is done.
+- Tie the confidence score to an actual metric.
+- I am now thinking that evaluation is an afterthought and only done at the end. Also we're just letting the AI decide a random number. We should have a concise metric for each area, and intermediary agents could also check or note down some metrics before they are done. What do you think? Should we just let a dedicated agent go through evaluation at the end?
+- Strip non-game elements from the DOM at start.
