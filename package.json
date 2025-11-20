@@ -16,7 +16,7 @@
     "test:scheduled": "wrangler dev --test-scheduled --local"
   },
   "dependencies": {
-    "@browserbasehq/stagehand": "^2.5.0",
+    "@browserbasehq/stagehand": "^3.0.1",
     "@cloudflare/playwright": "^1.0.0",
     "@cloudflare/puppeteer": "latest",
     "react-router-dom": "^7.9.5",
